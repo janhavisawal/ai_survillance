@@ -1,13 +1,13 @@
-'use client'
+'use client';
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Shield, Video, VideoOff, Play, Pause, Upload, Settings, Activity, 
   Wifi, WifiOff, AlertTriangle, Users, Clock, Camera, 
   BarChart3, Maximize2, RefreshCw, Eye, Target, Bell, 
   Monitor, Cpu, HardDrive, Signal, CheckCircle, XCircle,
   FileVideo, Zap, TrendingUp, Database
-} from 'lucide-react'
+} from 'lucide-react';
 
 export default function Page() {
   const [feeds, setFeeds] = useState({
@@ -16,7 +16,7 @@ export default function Page() {
       currentCount: 0, 
       isFullscreen: false,
       isProcessing: false,
-      videoFile: null,
+      videoFile: null as File | null,
       analysisComplete: false,
       totalFrames: 0,
       processedFrames: 0
@@ -26,7 +26,7 @@ export default function Page() {
       currentCount: 0, 
       isFullscreen: false,
       isProcessing: false,
-      videoFile: null,
+      videoFile: null as File | null,
       analysisComplete: false,
       totalFrames: 0,
       processedFrames: 0
@@ -35,15 +35,14 @@ export default function Page() {
   
   const [isConnected, setIsConnected] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [apiStatus, setApiStatus] = useState('disconnected'); // 'connected', 'disconnected', 'connecting'
-  const [apiUrl, setApiUrl] = useState(''); // User will input their Colab URL
+  const [apiStatus, setApiStatus] = useState('disconnected');
+  const [apiUrl, setApiUrl] = useState('');
   
-  // Real analytics from API
   const [analytics, setAnalytics] = useState({
     totalDetections: 0,
     avgConfidence: 0,
     peakOccupancy: 0,
-    detectionHistory: [],
+    detectionHistory: [] as any[],
     confidenceDistribution: { high: 0, medium: 0, low: 0 },
     processingStats: {
       avgProcessingTime: 0,
@@ -52,24 +51,14 @@ export default function Page() {
     }
   });
   
-  const [alerts, setAlerts] = useState([]);
+  const [alerts, setAlerts] = useState([] as any[]);
   
   const [config, setConfig] = useState({
-    confidence: 0.08, // Ultra-sensitive as per your API
+    confidence: 0.08,
     maxPeople: 15,
     alertEnabled: true,
     nightVision: false,
     motionDetection: true
-  });
-
-  const [systemStats, setSystemStats] = useState({
-    cpuUsage: 45,
-    memoryUsage: 67,
-    diskUsage: 23,
-    networkLatency: 12,
-    totalDetections: 2847,
-    avgAccuracy: 96.8,
-    uptime: '99.9%'
   });
 
   const fileInputRef1 = useRef<HTMLInputElement>(null);
@@ -77,13 +66,11 @@ export default function Page() {
   const videoRef1 = useRef<HTMLVideoElement>(null);
   const videoRef2 = useRef<HTMLVideoElement>(null);
 
-  // Update time every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Test API connection
   const testApiConnection = async () => {
     if (!apiUrl.trim()) {
       alert('Please enter your Google Colab API URL');
@@ -99,7 +86,6 @@ export default function Page() {
         setIsConnected(true);
         console.log('API Connected:', data);
         
-        // Add success alert
         setAlerts(prev => [{
           id: Date.now(),
           type: 'success',
@@ -125,7 +111,6 @@ export default function Page() {
     }
   };
 
-  // Process uploaded video
   const processVideo = async (file: File, feedId: string) => {
     if (!isConnected) {
       alert('Please connect to your API first!');
@@ -135,7 +120,7 @@ export default function Page() {
     setFeeds(prev => ({
       ...prev,
       [feedId]: {
-        ...prev[feedId],
+        ...prev[feedId as keyof typeof prev],
         isProcessing: true,
         videoFile: file,
         processedFrames: 0,
@@ -143,22 +128,20 @@ export default function Page() {
       }
     }));
 
-    // Load video to get duration/frames
     const video = document.createElement('video');
     video.src = URL.createObjectURL(file);
     
     video.onloadedmetadata = async () => {
       const duration = video.duration;
-      const fps = 30; // Approximate
+      const fps = 30;
       const totalFrames = Math.floor(duration * fps);
       
       setFeeds(prev => ({
         ...prev,
-        [feedId]: { ...prev[feedId], totalFrames }
+        [feedId]: { ...prev[feedId as keyof typeof prev], totalFrames }
       }));
 
       try {
-        // Send video to API for processing
         const formData = new FormData();
         formData.append('file', file);
         formData.append('confidence', config.confidence.toString());
@@ -172,20 +155,18 @@ export default function Page() {
         if (response.ok) {
           const result = await response.json();
           
-          // Update analytics with real data
           updateAnalyticsFromResult(result, feedId);
           
           setFeeds(prev => ({
             ...prev,
             [feedId]: {
-              ...prev[feedId],
+              ...prev[feedId as keyof typeof prev],
               isProcessing: false,
               analysisComplete: true,
               currentCount: result.peak_occupancy || 0
             }
           }));
 
-          // Add completion alert
           setAlerts(prev => [{
             id: Date.now(),
             type: 'success',
@@ -201,7 +182,7 @@ export default function Page() {
         console.error('Video processing error:', error);
         setFeeds(prev => ({
           ...prev,
-          [feedId]: { ...prev[feedId], isProcessing: false }
+          [feedId]: { ...prev[feedId as keyof typeof prev], isProcessing: false }
         }));
         
         setAlerts(prev => [{
@@ -215,12 +196,10 @@ export default function Page() {
     };
   };
 
-  // Update analytics from API result
   const updateAnalyticsFromResult = (result: any, feedId: string) => {
     setAnalytics(prev => {
       const newHistory = [...prev.detectionHistory];
       
-      // Add detection timeline data
       if (result.detection_timeline) {
         result.detection_timeline.forEach((point: any) => {
           newHistory.push({
@@ -232,7 +211,6 @@ export default function Page() {
         });
       }
 
-      // Update confidence distribution
       const confidenceDistribution = { high: 0, medium: 0, low: 0 };
       if (result.detections) {
         result.detections.forEach((detection: any) => {
@@ -246,7 +224,7 @@ export default function Page() {
         totalDetections: prev.totalDetections + (result.total_detections || 0),
         avgConfidence: result.avg_confidence || prev.avgConfidence,
         peakOccupancy: Math.max(prev.peakOccupancy, result.peak_occupancy || 0),
-        detectionHistory: newHistory.slice(-100), // Keep last 100 points
+        detectionHistory: newHistory.slice(-100),
         confidenceDistribution,
         processingStats: {
           avgProcessingTime: result.avg_processing_time || prev.processingStats.avgProcessingTime,
@@ -258,10 +236,9 @@ export default function Page() {
   };
 
   const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>, feedId: string) => {
-    const file = event.target.files && event.target.files[0];
+    const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate video file
     if (!file.type.startsWith('video/')) {
       alert('Please upload a valid video file');
       return;
@@ -280,7 +257,7 @@ export default function Page() {
       
       setFeeds(prev => ({
         ...prev,
-        [feedId]: { ...prev[feedId], isStreaming: true }
+        [feedId]: { ...prev[feedId as keyof typeof prev], isStreaming: true }
       }));
     }
   };
@@ -293,7 +270,7 @@ export default function Page() {
       
       setFeeds(prev => ({
         ...prev,
-        [feedId]: { ...prev[feedId], isStreaming: false }
+        [feedId]: { ...prev[feedId as keyof typeof prev], isStreaming: false }
       }));
     }
   };
@@ -306,8 +283,6 @@ export default function Page() {
     }
   };
 
-  const totalCount = feeds.feed1.currentCount + feeds.feed2.currentCount;
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -315,7 +290,6 @@ export default function Page() {
       color: 'white',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      {/* Animated Background Effects */}
       <div style={{
         position: 'fixed',
         inset: 0,
@@ -323,9 +297,7 @@ export default function Page() {
         pointerEvents: 'none'
       }}></div>
       
-      {/* Main Content */}
       <div style={{ position: 'relative', zIndex: 10 }}>
-        {/* Header with API Connection */}
         <header style={{
           background: 'rgba(15, 23, 42, 0.8)',
           backdropFilter: 'blur(20px)',
@@ -334,7 +306,6 @@ export default function Page() {
         }}>
           <div style={{ padding: '24px 32px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              {/* Left Section */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
                 <div style={{ position: 'relative' }}>
                   <div style={{
@@ -403,7 +374,6 @@ export default function Page() {
                 </div>
               </div>
               
-              {/* API Connection Section */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <input
@@ -470,10 +440,8 @@ export default function Page() {
           </div>
         </header>
 
-        {/* Main Dashboard - Video Feeds and Analytics */}
         <div style={{ padding: '32px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '32px' }}>
-            {/* Video Feeds Section */}
             <div>
               <div style={{
                 background: 'rgba(15, 23, 42, 0.6)',
@@ -483,29 +451,25 @@ export default function Page() {
                 boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
                 overflow: 'hidden'
               }}>
-                {/* Section Header */}
                 <div style={{
                   padding: '32px',
                   borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{
-                        padding: '12px',
-                        background: 'linear-gradient(45deg, #3b82f6, #06b6d4)',
-                        borderRadius: '16px'
-                      }}>
-                        <FileVideo style={{ width: '24px', height: '24px', color: 'white' }} />
-                      </div>
-                      <div>
-                        <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: 0 }}>Video Analysis</h2>
-                        <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Upload videos for AI-powered analysis</p>
-                      </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{
+                      padding: '12px',
+                      background: 'linear-gradient(45deg, #3b82f6, #06b6d4)',
+                      borderRadius: '16px'
+                    }}>
+                      <FileVideo style={{ width: '24px', height: '24px', color: 'white' }} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: 0 }}>Video Analysis</h2>
+                      <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Upload videos for AI-powered analysis</p>
                     </div>
                   </div>
                 </div>
                 
-                {/* Video Grid */}
                 <div style={{ padding: '32px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
                     {/* Feed 1 */}
@@ -549,7 +513,7 @@ export default function Page() {
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
-                            onClick={() => fileInputRef1.current && fileInputRef1.current.click()}
+                            onClick={() => fileInputRef1.current?.click()}
                             disabled={feeds.feed1.isProcessing}
                             style={{
                               padding: '8px 16px',
@@ -625,7 +589,6 @@ export default function Page() {
                           </div>
                         )}
                         
-                        {/* Processing Overlay */}
                         {feeds.feed1.isProcessing && (
                           <div style={{
                             position: 'absolute',
@@ -654,7 +617,6 @@ export default function Page() {
                           </div>
                         )}
                         
-                        {/* Analysis Complete Overlay */}
                         {feeds.feed1.analysisComplete && (
                           <div style={{ position: 'absolute', top: '24px', right: '24px' }}>
                             <div style={{
@@ -674,7 +636,6 @@ export default function Page() {
                           </div>
                         )}
                         
-                        {/* Detection Count Overlay */}
                         {feeds.feed1.analysisComplete && (
                           <div style={{ position: 'absolute', bottom: '24px', left: '24px' }}>
                             <div style={{
@@ -698,7 +659,7 @@ export default function Page() {
                       </div>
                     </div>
                     
-                    {/* Feed 2 - Similar structure */}
+                    {/* Feed 2 */}
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -739,7 +700,7 @@ export default function Page() {
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
-                            onClick={() => fileInputRef2.current && fileInputRef2.current.click()}
+                            onClick={() => fileInputRef2.current?.click()}
                             disabled={feeds.feed2.isProcessing}
                             style={{
                               padding: '8px 16px',
@@ -815,7 +776,6 @@ export default function Page() {
                           </div>
                         )}
                         
-                        {/* Processing Overlay */}
                         {feeds.feed2.isProcessing && (
                           <div style={{
                             position: 'absolute',
@@ -844,7 +804,6 @@ export default function Page() {
                           </div>
                         )}
                         
-                        {/* Analysis Complete Overlay */}
                         {feeds.feed2.analysisComplete && (
                           <div style={{ position: 'absolute', top: '24px', right: '24px' }}>
                             <div style={{
@@ -864,7 +823,6 @@ export default function Page() {
                           </div>
                         )}
                         
-                        {/* Detection Count Overlay */}
                         {feeds.feed2.analysisComplete && (
                           <div style={{ position: 'absolute', bottom: '24px', left: '24px' }}>
                             <div style={{
@@ -894,7 +852,6 @@ export default function Page() {
             
             {/* Analytics Sidebar */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-              {/* Real-time Analytics */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.6)',
                 backdropFilter: 'blur(20px)',
@@ -917,7 +874,6 @@ export default function Page() {
                   </div>
                 </div>
                 
-                {/* Total Detections Display */}
                 <div style={{
                   textAlign: 'center',
                   marginBottom: '32px',
@@ -942,7 +898,6 @@ export default function Page() {
                   </div>
                 </div>
                 
-                {/* Analytics Metrics */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div style={{
                     background: 'rgba(30, 41, 59, 0.5)',
@@ -978,28 +933,8 @@ export default function Page() {
                     </div>
                   </div>
                 </div>
-                
-                {/* Confidence Distribution */}
-                <div style={{ marginTop: '24px' }}>
-                  <h4 style={{ fontSize: '16px', fontWeight: '600', color: 'white', marginBottom: '16px' }}>Confidence Distribution</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '14px', color: '#cbd5e1' }}>High (≥70%)</span>
-                      <span style={{ color: '#10b981', fontWeight: '600' }}>{analytics.confidenceDistribution.high}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '14px', color: '#cbd5e1' }}>Medium (40-70%)</span>
-                      <span style={{ color: '#fbbf24', fontWeight: '600' }}>{analytics.confidenceDistribution.medium}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '14px', color: '#cbd5e1' }}>Low (<40%)</span>
-                      <span style={{ color: '#ef4444', fontWeight: '600' }}>{analytics.confidenceDistribution.low}</span>
-                    </div>
-                  </div>
-                </div>
               </div>
               
-              {/* Configuration */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.6)',
                 backdropFilter: 'blur(20px)',
@@ -1035,8 +970,13 @@ export default function Page() {
                       step="0.01"
                       value={config.confidence}
                       onChange={(e) => setConfig({...config, confidence: parseFloat(e.target.value)})}
-                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
                       style={{
+                        width: '100%',
+                        height: '8px',
+                        background: '#374151',
+                        borderRadius: '8px',
+                        appearance: 'none',
+                        cursor: 'pointer',
                         accentColor: '#06b6d4'
                       }}
                     />
@@ -1069,7 +1009,6 @@ export default function Page() {
                 </div>
               </div>
               
-              {/* System Status & Alerts */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.6)',
                 backdropFilter: 'blur(20px)',
@@ -1152,7 +1091,6 @@ export default function Page() {
         </div>
       </div>
       
-      {/* CSS Animations */}
       <style>{`
         @keyframes pulse {
           0%, 100% {
@@ -1172,5 +1110,5 @@ export default function Page() {
         }
       `}</style>
     </div>
-  )
+  );
 }
