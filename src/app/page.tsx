@@ -104,9 +104,14 @@ export default function VideoAnalyticsDashboard() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
       // Convert to blob
-      const blob = await new Promise(resolve => {
+      const blob = await new Promise<Blob | null>(resolve => {
         canvas.toBlob(resolve, 'image/jpeg', 0.8);
       });
+      
+      if (!blob) {
+        console.error('Failed to create blob from canvas');
+        return;
+      }
       
       // Send to API for detection
       const formData = new FormData();
