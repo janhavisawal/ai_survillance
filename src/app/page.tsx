@@ -118,7 +118,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     totalDetections: 0,
     avgConfidence: 0,
     peakOccupancy: 0,
-    detectionHistory: [],
+    detectionHistory: [] as any[],
     confidenceDistribution: { high: 0, medium: 0, low: 0 },
     processingStats: {
       avgProcessingTime: 0,
@@ -127,7 +127,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   });
   
-  const [alerts, setAlerts] = useState([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
   
   const [config, setConfig] = useState({
     confidence: 0.08,
@@ -280,7 +280,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
         message: `Video analysis complete! Found ${result.total_detections} total detections with peak occupancy of ${result.peak_occupancy} people.`,
         time: new Date().toLocaleTimeString(),
         severity: 'low'
-      }, ...prev.slice(0, 4)]);
+      }, ...(prev || []).slice(0, 4)]);
 
     } catch (error) {
       console.error('Video processing error:', error);
@@ -525,7 +525,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
         totalDetections: prev.totalDetections + newDetections,
         avgConfidence: newConfidence > 0 ? newConfidence : prev.avgConfidence,
         peakOccupancy: Math.max(prev.peakOccupancy, newDetections),
-        detectionHistory: [...prev.detectionHistory, {
+        detectionHistory: [...(prev.detectionHistory || []), {
           timestamp: Date.now(),
           count: newDetections,
           feedId: feedId,
@@ -648,7 +648,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
         message: `Camera access failed for ${feedId}: ${error.message || 'Unknown error'}`,
         time: new Date().toLocaleTimeString(),
         severity: 'high'
-      }, ...prev.slice(0, 4)]);
+      }, ...(prev || []).slice(0, 4)]);
     }
   };
 
@@ -695,7 +695,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
           message: `Connected to AI Detection API (${data.detector_type || 'Unknown Model'})`,
           time: new Date().toLocaleTimeString(),
           severity: 'low'
-        }, ...prev.slice(0, 4)]);
+        }, ...(prev || []).slice(0, 4)]);
       } else {
         throw new Error('API not responding');
       }
@@ -1674,13 +1674,13 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   </div>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {alerts.length === 0 ? (
+                    {alerts && alerts.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '32px' }}>
                         <CheckCircle style={{ width: '48px', height: '48px', color: '#10b981', margin: '0 auto 16px' }} />
                         <p style={{ color: '#94a3b8', fontSize: '14px', margin: 0 }}>All systems operational</p>
                       </div>
                     ) : (
-                      alerts.map((alert) => (
+                      (alerts || []).map((alert) => (
                         <div
                           key={alert.id}
                           style={{
@@ -1914,25 +1914,25 @@ export default function EnhancedVideoAnalyticsDashboard() {
                               </tr>
                             </thead>
                             <tbody>
-                              {videoAnalysisResult.detection_timeline.slice(0, 10).map((entry, index) => (
+                              {videoAnalysisResult?.detection_timeline?.slice(0, 10).map((entry, index) => (
                                 <tr key={index} style={{ borderBottom: '1px solid #374151' }}>
-                                  <td style={{ padding: '12px', color: 'white' }}>{entry.frame_number}</td>
-                                  <td style={{ padding: '12px', color: '#cbd5e1' }}>{entry.timestamp.toFixed(1)}s</td>
-                                  <td style={{ padding: '12px', color: 'white', fontWeight: '600' }}>{entry.people_count}</td>
+                                  <td style={{ padding: '12px', color: 'white', fontWeight: '600' }}>{entry?.frame_number || 0}</td>
+                                  <td style={{ padding: '12px', color: '#cbd5e1' }}>{entry?.timestamp?.toFixed(1) || '0'}s</td>
+                                  <td style={{ padding: '12px', color: 'white', fontWeight: '600' }}>{entry?.people_count || 0}</td>
                                   <td style={{ padding: '12px' }}>
                                     <span style={{
                                       fontWeight: '600',
-                                      color: entry.avg_confidence >= 0.7 ? '#10b981' :
-                                            entry.avg_confidence >= 0.4 ? '#f59e0b' : '#ef4444'
+                                      color: (entry?.avg_confidence || 0) >= 0.7 ? '#10b981' :
+                                            (entry?.avg_confidence || 0) >= 0.4 ? '#f59e0b' : '#ef4444'
                                     }}>
-                                      {(entry.avg_confidence * 100).toFixed(1)}%
+                                      {((entry?.avg_confidence || 0) * 100).toFixed(1)}%
                                     </span>
                                   </td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
-                          {videoAnalysisResult.detection_timeline.length > 10 && (
+                          {videoAnalysisResult?.detection_timeline && videoAnalysisResult.detection_timeline.length > 10 && (
                             <p style={{ color: '#94a3b8', fontSize: '12px', margin: '16px 0 0 0' }}>
                               Showing first 10 of {videoAnalysisResult.detection_timeline.length} timeline entries. Download full results for complete data.
                             </p>
