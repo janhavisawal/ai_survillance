@@ -258,55 +258,55 @@ export default function VideoAnalyticsDashboard() {
   }
 
   const handleVideoUpload = (event, feedId) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
 
     // Validate video file
     if (!file.type.startsWith('video/')) {
-      alert('Please upload a valid video file')
-      return
+      alert('Please upload a valid video file');
+      return;
     }
 
-    processVideo(file, feedId)
-  }
+    processVideo(file, feedId);
+  };
 
   const playVideo = (feedId) => {
-    const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2
-    const feed = feeds[feedId]
+    const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
+    const feed = feeds[feedId];
     
     if (feed.videoFile && videoRef.current) {
-      videoRef.current.src = URL.createObjectURL(feed.videoFile)
-      videoRef.current.play()
+      videoRef.current.src = URL.createObjectURL(feed.videoFile);
+      videoRef.current.play();
       
       setFeeds(prev => ({
         ...prev,
         [feedId]: { ...prev[feedId], isStreaming: true }
-      }))
+      }));
     }
-  }
+  };
 
   const pauseVideo = (feedId) => {
-    const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2
+    const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
     
     if (videoRef.current) {
-      videoRef.current.pause()
+      videoRef.current.pause();
       
       setFeeds(prev => ({
         ...prev,
         [feedId]: { ...prev[feedId], isStreaming: false }
-      }))
+      }));
     }
-  }
+  };
 
   const toggleVideo = (feedId) => {
     if (feeds[feedId].isStreaming) {
-      pauseVideo(feedId)
+      pauseVideo(feedId);
     } else {
-      playVideo(feedId)
+      playVideo(feedId);
     }
-  }
+  };
 
-  const totalCount = feeds.feed1.currentCount + feeds.feed2.currentCount
+  const totalCount = feeds.feed1.currentCount + feeds.feed2.currentCount;
 
   return (
     <div style={{
@@ -549,7 +549,7 @@ export default function VideoAnalyticsDashboard() {
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
-                            onClick={() => fileInputRef1.current?.click()}
+                            onClick={() => fileInputRef1.current && fileInputRef1.current.click()}
                             disabled={feeds.feed1.isProcessing}
                             style={{
                               padding: '8px 16px',
@@ -739,7 +739,7 @@ export default function VideoAnalyticsDashboard() {
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
-                            onClick={() => fileInputRef2.current?.click()}
+                            onClick={() => fileInputRef2.current && fileInputRef2.current.click()}
                             disabled={feeds.feed2.isProcessing}
                             style={{
                               padding: '8px 16px',
