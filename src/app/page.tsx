@@ -229,7 +229,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     setHeatmapData(prev => {
       const newData = { ...prev };
       const feedData = { ...newData[feedId] };
-      const gridSize = 20; // Smaller grid for more detail
+      const gridSize = 32; // Grid cell size for heatmap
       
       detections.forEach(detection => {
         const [x1, y1, x2, y2] = detection.bbox;
@@ -245,9 +245,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
     });
   }, []);
 
-  const drawAdvancedHeatmap = useCallback((feedId: 'feed1' | 'feed2') => {
+  const drawHeatmap = useCallback((feedId: 'feed1' | 'feed2') => {
     const heatmapVideoRef = feedId === 'feed1' ? heatmapVideoRef1 : heatmapVideoRef2;
     const heatmapCanvasRef = feedId === 'feed1' ? heatmapCanvasRef1 : heatmapCanvasRef2;
+    const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
+    const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
     
     const canvas = heatmapCanvasRef.current;
     const video = heatmapVideoRef.current;
@@ -262,153 +264,79 @@ export default function EnhancedVideoAnalyticsDashboard() {
     canvas.width = rect.width;
     canvas.height = rect.height;
     
-    // Clear canvas with dark background
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     const feedData = heatmapData[feedId];
-    if (!feedData || Object.keys(feedData).length === 0) {
-      // Show placeholder when no data
-      ctx.fillStyle = 'rgba(100, 116, 139, 0.6)';
-      ctx.font = 'bold 16px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('No Activity Data', canvas.width / 2, canvas.height / 2);
-      return;
-    }
+    if (!feedData || Object.keys(feedData).length === 0) return;
     
-    const gridSize = 20;
+    const gridSize = 32;
     const maxDensity = Math.max(...Object.values(feedData)) || 1;
     
     // Scale factors
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    // Create gradient map for smoother transitions
-    const gradientData: { [key: string]: number } = {};
+    // Draw heatmap cells
     Object.entries(feedData).forEach(([key, density]) => {
-      const [x, y] = key.split('_').map(Number);
-      
-      // Apply Gaussian blur effect for smooth heatmap
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = -2; dy <= 2; dy++) {
-          const nx = x + dx * gridSize;
-          const ny = y + dy * gridSize;
-          const newKey = `${nx}_${ny}`;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const influence = Math.exp(-distance * 0.8) * density;
-          gradientData[newKey] = (gradientData[newKey] || 0) + influence;
-        }
-      }
-    });
-    
-    // Draw heatmap with advanced visualization
-    Object.entries(gradientData).forEach(([key, density]) => {
       const [x, y] = key.split('_').map(Number);
       const scaledX = x * scaleX;
       const scaledY = y * scaleY;
       const scaledSize = gridSize * Math.min(scaleX, scaleY);
       
-      const intensity = Math.min(density / maxDensity, 1);
+      const intensity = density / maxDensity;
       
-      // Advanced color mapping with multiple gradients
+      // Color based on intensity (blue to red heatmap)
       let color;
-      if (intensity < 0.2) {
-        const t = intensity / 0.2;
-        color = `rgba(${59 + t * 40}, ${130 + t * 25}, ${246 - t * 100}, ${intensity * 0.4})`;
-      } else if (intensity < 0.5) {
-        const t = (intensity - 0.2) / 0.3;
-        color = `rgba(${99 + t * 146}, ${155 + t * 3}, ${146 + t * 109}, ${0.4 + t * 0.3})`;
-      } else if (intensity < 0.8) {
-        const t = (intensity - 0.5) / 0.3;
-        color = `rgba(${245}, ${158 - t * 90}, ${11 + t * 57}, ${0.7 + t * 0.1})`;
+      if (intensity < 0.3) {
+        color = `rgba(59, 130, 246, ${intensity * 0.6})`; // Blue for low activity
+      } else if (intensity < 0.7) {
+        color = `rgba(245, 158, 11, ${intensity * 0.7})`; // Orange for medium
       } else {
-        const t = (intensity - 0.8) / 0.2;
-        color = `rgba(${245 - t * 6}, ${68}, ${68}, ${0.8 + t * 0.2})`;
+        color = `rgba(239, 68, 68, ${intensity * 0.8})`; // Red for high activity
       }
       
-      // Create radial gradient for each point
-      const gradient = ctx.createRadialGradient(
-        scaledX + scaledSize/2, scaledY + scaledSize/2, 0,
-        scaledX + scaledSize/2, scaledY + scaledSize/2, scaledSize * 0.8
-      );
-      gradient.addColorStop(0, color);
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      
-      ctx.fillStyle = gradient;
+      // Smooth circles instead of squares for better visualization
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(scaledX + scaledSize/2, scaledY + scaledSize/2, scaledSize * 0.8, 0, 2 * Math.PI);
+      ctx.arc(scaledX + scaledSize/2, scaledY + scaledSize/2, scaledSize/2, 0, 2 * Math.PI);
       ctx.fill();
     });
     
-    // Advanced legend with better design
-    const legendX = canvas.width - 160;
+    // Overlay legend
+    const legendX = canvas.width - 120;
     const legendY = 20;
-    const legendWidth = 140;
-    const legendHeight = 120;
     
-    // Legend background with blur effect
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
-    ctx.fillRect(legendX - 10, legendY - 10, legendWidth, legendHeight);
-    
-    // Legend border
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(legendX - 10, legendY - 10, legendWidth, legendHeight);
+    // Legend background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(legendX - 10, legendY - 10, 110, 90);
     
     // Legend title
     ctx.fillStyle = 'white';
-    ctx.font = 'bold 14px system-ui';
-    ctx.textAlign = 'left';
-    ctx.fillText('🔥 Activity Heatmap', legendX, legendY + 15);
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillText('Activity Density', legendX, legendY + 10);
     
-    // Gradient scale
-    const gradientScale = ctx.createLinearGradient(legendX, legendY + 30, legendX, legendY + 80);
-    gradientScale.addColorStop(0, 'rgba(239, 68, 68, 0.9)');
-    gradientScale.addColorStop(0.4, 'rgba(245, 158, 11, 0.8)');
-    gradientScale.addColorStop(0.8, 'rgba(99, 155, 255, 0.6)');
-    gradientScale.addColorStop(1, 'rgba(59, 130, 246, 0.3)');
+    // Legend items
+    const legendItems = [
+      { color: 'rgba(59, 130, 246, 0.6)', label: 'Low' },
+      { color: 'rgba(245, 158, 11, 0.7)', label: 'Medium' },
+      { color: 'rgba(239, 68, 68, 0.8)', label: 'High' }
+    ];
     
-    ctx.fillStyle = gradientScale;
-    ctx.fillRect(legendX, legendY + 30, 20, 50);
-    
-    // Scale labels
-    const scaleLabels = ['High', 'Med', 'Low'];
-    scaleLabels.forEach((label, index) => {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    legendItems.forEach((item, index) => {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX, legendY + 20 + (index * 18), 15, 12);
+      ctx.fillStyle = 'white';
       ctx.font = '11px system-ui';
-      ctx.fillText(label, legendX + 30, legendY + 40 + (index * 20));
+      ctx.fillText(item.label, legendX + 20, legendY + 30 + (index * 18));
     });
     
-    // Statistics
-    const totalActivity = Object.values(feedData).reduce((sum, val) => sum + val, 0);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.font = '10px system-ui';
-    ctx.fillText(`Total: ${totalActivity}`, legendX, legendY + 95);
-    
-    // Mode indicator with modern styling
-    const modeX = 15;
-    const modeY = canvas.height - 45;
-    
-    // Modern pill-shaped background
-    ctx.fillStyle = 'rgba(255, 107, 53, 0.95)';
-    ctx.beginPath();
-    ctx.roundRect(modeX, modeY, 140, 30, 15);
-    ctx.fill();
-    
-    // Glow effect
-    ctx.shadowColor = 'rgba(255, 107, 53, 0.5)';
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = 'rgba(255, 107, 53, 0.95)';
-    ctx.beginPath();
-    ctx.roundRect(modeX, modeY, 140, 30, 15);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    
-    // Mode text
+    // Heatmap mode indicator
+    ctx.fillStyle = 'rgba(255, 107, 53, 0.9)';
+    ctx.fillRect(10, canvas.height - 35, 100, 25);
     ctx.fillStyle = 'white';
-    ctx.font = 'bold 12px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('🔥 HEATMAP MODE', modeX + 70, modeY + 20);
+    ctx.font = 'bold 11px system-ui';
+    ctx.fillText('🔥 HEATMAP', 15, canvas.height - 18);
   }, [heatmapData]);
 
   useEffect(() => {
@@ -521,7 +449,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
       // Draw initial detections on the video
       setTimeout(() => {
         if (result.detection_timeline && result.detection_timeline.length > 0) {
-          drawAdvancedVideoAnalysisResults(result.detection_timeline, feedId);
+          drawVideoAnalysisResults(result.detection_timeline, feedId);
         }
       }, 1000);
 
@@ -642,11 +570,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
         // Update heatmap data
         updateHeatmapData(result.detections || [], feedId as 'feed1' | 'feed2');
         
-        // Draw advanced bounding boxes
-        drawAdvancedBoundingBoxes(feedId, result.detections || []);
+        // Draw bounding boxes
+        drawRealBoundingBoxes(feedId, result.detections || []);
         
         // Update heatmap visualization
-        setTimeout(() => drawAdvancedHeatmap(feedId as 'feed1' | 'feed2'), 100);
+        setTimeout(() => drawHeatmap(feedId as 'feed1' | 'feed2'), 100);
         
         // Update analytics
         updateRealTimeAnalytics(result, feedId);
@@ -665,10 +593,10 @@ export default function EnhancedVideoAnalyticsDashboard() {
     } catch (error) {
       console.error(`Real-time detection error for ${feedId}:`, error);
     }
-  }, [isConnected, config, apiUrl, updateHeatmapData, drawAdvancedHeatmap]);
+  }, [isConnected, config, apiUrl, updateHeatmapData, drawHeatmap]);
 
-  // Enhanced video analysis drawing with ultra-modern, sharp bounding boxes
-  const drawAdvancedVideoAnalysisResults = useCallback((timelineData: any[] = [], feedId: 'feed1' | 'feed2') => {
+  // Enhanced video analysis drawing with sharp, professional bounding boxes
+  const drawVideoAnalysisResults = useCallback((timelineData: any[] = [], feedId: 'feed1' | 'feed2') => {
     const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     
@@ -705,7 +633,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    // Draw each detection with ultra-modern, sharp styling
+    // Draw each detection with sharp, professional style
     closestEntry.detections.forEach((detection: any, index: number) => {
       const { bbox, confidence } = detection;
       if (!bbox || bbox.length !== 4) return;
@@ -716,174 +644,128 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
+      // Sharp, professional bounding box style
       const boxWidth = scaledX2 - scaledX1;
       const boxHeight = scaledY2 - scaledY1;
       
-      // Ultra-modern sharp-edged design
-      const primaryColor = confidence >= 0.8 ? '#00ff88' : confidence >= 0.6 ? '#ffd700' : '#ff4444';
-      const glowColor = confidence >= 0.8 ? '#00ff8844' : confidence >= 0.6 ? '#ffd70044' : '#ff444444';
+      // Main box - sharp edges with gradient
+      const gradient = ctx.createLinearGradient(scaledX1, scaledY1, scaledX2, scaledY2);
+      gradient.addColorStop(0, 'rgba(59, 130, 246, 0.15)');
+      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.25)');
       
-      // Outer glow effect
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = 3;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(scaledX1, scaledY1, boxWidth, boxHeight);
+      
+      // Sharp border with shadow effect
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(59, 130, 246, 0.3)';
+      ctx.shadowBlur = 4;
       ctx.strokeRect(scaledX1, scaledY1, boxWidth, boxHeight);
-      
-      // Inner precision box
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(scaledX1 + 2, scaledY1 + 2, boxWidth - 4, boxHeight - 4);
       
-      // Sharp corner accents (ultra-modern design)
-      const cornerSize = 15;
-      const accentThickness = 4;
+      // Corner indicators (professional touch)
+      const cornerSize = 12;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 3;
       
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = accentThickness;
-      ctx.lineCap = 'square';
-      
-      // Top-left corner accent
+      // Top-left corner
       ctx.beginPath();
       ctx.moveTo(scaledX1, scaledY1 + cornerSize);
       ctx.lineTo(scaledX1, scaledY1);
       ctx.lineTo(scaledX1 + cornerSize, scaledY1);
       ctx.stroke();
       
-      // Top-right corner accent
+      // Top-right corner
       ctx.beginPath();
       ctx.moveTo(scaledX2 - cornerSize, scaledY1);
       ctx.lineTo(scaledX2, scaledY1);
       ctx.lineTo(scaledX2, scaledY1 + cornerSize);
       ctx.stroke();
       
-      // Bottom-right corner accent
+      // Bottom-right corner
       ctx.beginPath();
       ctx.moveTo(scaledX2, scaledY2 - cornerSize);
       ctx.lineTo(scaledX2, scaledY2);
       ctx.lineTo(scaledX2 - cornerSize, scaledY2);
       ctx.stroke();
       
-      // Bottom-left corner accent
+      // Bottom-left corner
       ctx.beginPath();
       ctx.moveTo(scaledX1 + cornerSize, scaledY2);
       ctx.lineTo(scaledX1, scaledY2);
       ctx.lineTo(scaledX1, scaledY2 - cornerSize);
       ctx.stroke();
       
-      // Ultra-modern floating badge
-      const personId = `T${index + 1}`;
+      // Professional ID badge
+      const personId = `P${index + 1}`;
       const confidenceText = `${(confidence * 100).toFixed(0)}%`;
       
       ctx.font = 'bold 11px system-ui';
       const idMetrics = ctx.measureText(personId);
       const confMetrics = ctx.measureText(confidenceText);
-      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 16;
-      const badgeHeight = 36;
+      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 12;
       
-      // Floating badge position (top-left, slightly offset)
-      const badgeX = scaledX1 - 2;
-      const badgeY = scaledY1 - badgeHeight - 8;
+      // Badge background with gradient
+      const badgeGradient = ctx.createLinearGradient(scaledX1, scaledY1 - 35, scaledX1, scaledY1);
+      badgeGradient.addColorStop(0, 'rgba(59, 130, 246, 0.95)');
+      badgeGradient.addColorStop(1, 'rgba(37, 99, 235, 0.95)');
       
-      // Badge background with ultra-modern gradient
-      const badgeGradient = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeHeight);
-      badgeGradient.addColorStop(0, `${primaryColor}f0`);
-      badgeGradient.addColorStop(1, `${primaryColor}d0`);
-      
-      // Badge glow
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 6;
       ctx.fillStyle = badgeGradient;
-      ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+      ctx.fillRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
       
-      // Badge sharp border
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#ffffff';
+      // Badge border
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
+      ctx.strokeRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
       
-      // Badge text with sharp typography
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 11px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(personId, badgeX + badgeWidth/2, badgeY + 15);
-      ctx.font = 'bold 9px system-ui';
-      ctx.fillText(confidenceText, badgeX + badgeWidth/2, badgeY + 28);
+      // Badge text
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillText(personId, scaledX1 + 6, scaledY1 - 22);
+      ctx.font = '9px system-ui';
+      ctx.fillText(confidenceText, scaledX1 + 6, scaledY1 - 8);
       
-      // Ultra-precise center crosshair
+      // Center crosshair
       const centerX = (scaledX1 + scaledX2) / 2;
       const centerY = (scaledY1 + scaledY2) / 2;
       
-      // Crosshair with sharp lines
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
       ctx.lineWidth = 2;
-      ctx.lineCap = 'square';
       ctx.beginPath();
-      ctx.moveTo(centerX - 10, centerY);
-      ctx.lineTo(centerX + 10, centerY);
-      ctx.moveTo(centerX, centerY - 10);
-      ctx.lineTo(centerX, centerY + 10);
+      ctx.moveTo(centerX - 8, centerY);
+      ctx.lineTo(centerX + 8, centerY);
+      ctx.moveTo(centerX, centerY - 8);
+      ctx.lineTo(centerX, centerY + 8);
       ctx.stroke();
       
-      // Center point
-      ctx.fillStyle = primaryColor;
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
       ctx.beginPath();
       ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
       ctx.fill();
-      
-      // Outer ring
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
-      ctx.stroke();
     });
     
-    // Ultra-modern floating header
-    const headerText = `${closestEntry.detections.length} TARGETS ACQUIRED`;
+    // Professional header
+    const headerText = `${closestEntry.detections.length} People Detected`;
     ctx.font = 'bold 14px system-ui';
     const headerMetrics = ctx.measureText(headerText);
-    const headerWidth = headerMetrics.width + 24;
-    const headerHeight = 32;
     
-    // Header position (top-center)
-    const headerX = (canvas.width - headerWidth) / 2;
-    const headerY = 15;
+    const headerGradient = ctx.createLinearGradient(10, 10, 10, 35);
+    headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+    headerGradient.addColorStop(1, 'rgba(30, 41, 59, 0.85)');
     
-    // Header background with sharp design
-    const headerGradient = ctx.createLinearGradient(headerX, headerY, headerX, headerY + headerHeight);
-    headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
-    headerGradient.addColorStop(1, 'rgba(15, 23, 42, 0.95)');
-    
-    ctx.shadowColor = 'rgba(59, 130, 246, 0.4)';
-    ctx.shadowBlur = 8;
     ctx.fillStyle = headerGradient;
-    ctx.fillRect(headerX, headerY, headerWidth, headerHeight);
+    ctx.fillRect(10, 10, headerMetrics.width + 20, 28);
     
-    // Header border
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(headerX, headerY, headerWidth, headerHeight);
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(10, 10, headerMetrics.width + 20, 28);
     
-    // Header text
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText(headerText, headerX + headerWidth/2, headerY + 21);
-    
-    // Scanning line effect (optional animation)
-    const scanLineY = (Math.sin(Date.now() * 0.005) + 1) / 2 * canvas.height;
-    ctx.strokeStyle = 'rgba(0, 255, 136, 0.6)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, scanLineY);
-    ctx.lineTo(canvas.width, scanLineY);
-    ctx.stroke();
+    ctx.fillStyle = 'white';
+    ctx.fillText(headerText, 20, 30);
   }, []);
 
-  const drawAdvancedBoundingBoxes = (feedId: string, detections: any[]) => {
+  const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
     const canvas = canvasRef.current;
@@ -921,123 +803,81 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const boxWidth = scaledX2 - scaledX1;
       const boxHeight = scaledY2 - scaledY1;
       
-      // Ultra-modern live detection styling with cyberpunk aesthetics
-      const primaryColor = confidence >= 0.8 ? '#00ff88' : confidence >= 0.6 ? '#00ffff' : '#ff0080';
-      const glowColor = confidence >= 0.8 ? '#00ff8866' : confidence >= 0.6 ? '#00ffff66' : '#ff008066';
+      // Sharp, professional style with green theme for live
+      const gradient = ctx.createLinearGradient(scaledX1, scaledY1, scaledX2, scaledY2);
+      gradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+      gradient.addColorStop(1, 'rgba(16, 185, 129, 0.25)');
       
-      // Outer glow effect
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 12;
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = 3;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(scaledX1, scaledY1, boxWidth, boxHeight);
+      
+      // Sharp border with glow effect
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(16, 185, 129, 0.4)';
+      ctx.shadowBlur = 6;
       ctx.strokeRect(scaledX1, scaledY1, boxWidth, boxHeight);
-      
-      // Inner precision frame
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(scaledX1 + 2, scaledY1 + 2, boxWidth - 4, boxHeight - 4);
       
-      // Sharp corner indicators with cyberpunk design
-      const cornerSize = 18;
-      const accentThickness = 5;
+      // Corner indicators
+      const cornerSize = 12;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 3;
       
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = accentThickness;
-      ctx.lineCap = 'square';
+      // Draw all four corners
+      ctx.beginPath();
+      // Top-left
+      ctx.moveTo(scaledX1, scaledY1 + cornerSize);
+      ctx.lineTo(scaledX1, scaledY1);
+      ctx.lineTo(scaledX1 + cornerSize, scaledY1);
+      // Top-right
+      ctx.moveTo(scaledX2 - cornerSize, scaledY1);
+      ctx.lineTo(scaledX2, scaledY1);
+      ctx.lineTo(scaledX2, scaledY1 + cornerSize);
+      // Bottom-right
+      ctx.moveTo(scaledX2, scaledY2 - cornerSize);
+      ctx.lineTo(scaledX2, scaledY2);
+      ctx.lineTo(scaledX2 - cornerSize, scaledY2);
+      // Bottom-left
+      ctx.moveTo(scaledX1 + cornerSize, scaledY2);
+      ctx.lineTo(scaledX1, scaledY2);
+      ctx.lineTo(scaledX1, scaledY2 - cornerSize);
+      ctx.stroke();
       
-      // Enhanced corner design
-      const corners = [
-        { x: scaledX1, y: scaledY1, dx: 1, dy: 1 },      // top-left
-        { x: scaledX2, y: scaledY1, dx: -1, dy: 1 },     // top-right
-        { x: scaledX2, y: scaledY2, dx: -1, dy: -1 },    // bottom-right
-        { x: scaledX1, y: scaledY2, dx: 1, dy: -1 }      // bottom-left
-      ];
-      
-      corners.forEach(corner => {
-        ctx.beginPath();
-        ctx.moveTo(corner.x, corner.y + corner.dy * cornerSize);
-        ctx.lineTo(corner.x, corner.y);
-        ctx.lineTo(corner.x + corner.dx * cornerSize, corner.y);
-        ctx.stroke();
-        
-        // Additional corner accent
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(corner.x, corner.y + corner.dy * (cornerSize - 4));
-        ctx.lineTo(corner.x, corner.y);
-        ctx.lineTo(corner.x + corner.dx * (cornerSize - 4), corner.y);
-        ctx.stroke();
-        ctx.strokeStyle = primaryColor;
-        ctx.lineWidth = accentThickness;
-      });
-      
-      // Ultra-modern floating HUD badge
-      const personId = `L${index + 1}`;
+      // Professional badge for live detection
+      const personId = `P${index + 1}`;
       const confidenceText = `${(confidence * 100).toFixed(0)}%`;
       
-      ctx.font = 'bold 12px system-ui';
+      ctx.font = 'bold 11px system-ui';
       const idMetrics = ctx.measureText(personId);
       const confMetrics = ctx.measureText(confidenceText);
-      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 18;
-      const badgeHeight = 38;
+      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 12;
       
-      // Floating badge position (top-left, offset)
-      const badgeX = scaledX1 - 3;
-      const badgeY = scaledY1 - badgeHeight - 10;
+      // Badge with green gradient
+      const badgeGradient = ctx.createLinearGradient(scaledX1, scaledY1 - 35, scaledX1, scaledY1);
+      badgeGradient.addColorStop(0, 'rgba(16, 185, 129, 0.95)');
+      badgeGradient.addColorStop(1, 'rgba(5, 150, 105, 0.95)');
       
-      // HUD-style badge background
-      const badgeGradient = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeHeight);
-      badgeGradient.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
-      badgeGradient.addColorStop(0.5, `${primaryColor}40`);
-      badgeGradient.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
-      
-      // Badge glow
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 8;
       ctx.fillStyle = badgeGradient;
-      ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+      ctx.fillRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
       
-      // Badge sharp frame
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
-      
-      // Inner frame
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(badgeX + 1, badgeY + 1, badgeWidth - 2, badgeHeight - 2);
+      ctx.strokeRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
       
-      // Badge text with HUD styling
-      ctx.fillStyle = primaryColor;
-      ctx.font = 'bold 12px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(personId, badgeX + badgeWidth/2, badgeY + 16);
-      
-      ctx.fillStyle = '#ffffff';
+      // Badge text
+      ctx.fillStyle = 'white';
       ctx.font = 'bold 10px system-ui';
-      ctx.fillText(confidenceText, badgeX + badgeWidth/2, badgeY + 30);
+      ctx.fillText(personId, scaledX1 + 6, scaledY1 - 22);
+      ctx.font = '9px system-ui';
+      ctx.fillText(confidenceText, scaledX1 + 6, scaledY1 - 8);
       
-      // Ultra-precise targeting crosshair
+      // Center crosshair
       const centerX = (scaledX1 + scaledX2) / 2;
       const centerY = (scaledY1 + scaledY2) / 2;
       
-      // Main crosshair
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'square';
-      ctx.beginPath();
-      ctx.moveTo(centerX - 12, centerY);
-      ctx.lineTo(centerX + 12, centerY);
-      ctx.moveTo(centerX, centerY - 12);
-      ctx.lineTo(centerX, centerY + 12);
-      ctx.stroke();
-      
-      // Inner crosshair
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(centerX - 8, centerY);
       ctx.lineTo(centerX + 8, centerY);
@@ -1045,81 +885,38 @@ export default function EnhancedVideoAnalyticsDashboard() {
       ctx.lineTo(centerX, centerY + 8);
       ctx.stroke();
       
-      // Center targeting point
-      ctx.fillStyle = primaryColor;
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
+      ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
       ctx.fill();
-      
-      // Outer targeting ring
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
-      ctx.stroke();
-      
-      // Pulse ring effect
-      const pulseRadius = 12 + Math.sin(Date.now() * 0.01) * 3;
-      ctx.strokeStyle = `${primaryColor}80`;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, pulseRadius, 0, 2 * Math.PI);
-      ctx.stroke();
     });
     
-    // Ultra-modern live status header
+    // Professional live header
     if (detections.length > 0) {
-      const headerText = `${detections.length} LIVE TARGETS`;
-      ctx.font = 'bold 15px system-ui';
-      const headerMetrics = ctx.measureText(headerText);
-      const headerWidth = headerMetrics.width + 60;
-      const headerHeight = 34;
-      
-      // Header position (top-center)
-      const headerX = (canvas.width - headerWidth) / 2;
-      const headerY = 12;
-      
-      // Cyberpunk header background
-      const headerGradient = ctx.createLinearGradient(headerX, headerY, headerX, headerY + headerHeight);
-      headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
-      headerGradient.addColorStop(0.5, 'rgba(0, 255, 136, 0.2)');
-      headerGradient.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
-      
-      ctx.shadowColor = 'rgba(0, 255, 136, 0.6)';
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = headerGradient;
-      ctx.fillRect(headerX, headerY, headerWidth, headerHeight);
-      
-      // Header frame
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(headerX, headerY, headerWidth, headerHeight);
-      
-      // Header text
-      ctx.fillStyle = '#ffffff';
+      const headerText = `${detections.length} People Detected`;
       ctx.font = 'bold 14px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(headerText, headerX + headerWidth/2, headerY + 22);
+      const headerMetrics = ctx.measureText(headerText);
       
-      // Live indicator with pulsing effect
-      const liveX = canvas.width - 70;
-      const liveY = 12;
-      const liveWidth = 55;
-      const liveHeight = 24;
+      const headerGradient = ctx.createLinearGradient(10, 10, 10, 35);
+      headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+      headerGradient.addColorStop(1, 'rgba(30, 41, 59, 0.85)');
       
-      const pulseAlpha = 0.8 + Math.sin(Date.now() * 0.008) * 0.2;
-      ctx.fillStyle = `rgba(255, 0, 0, ${pulseAlpha})`;
-      ctx.fillRect(liveX, liveY, liveWidth, liveHeight);
+      ctx.fillStyle = headerGradient;
+      ctx.fillRect(10, 10, headerMetrics.width + 50, 28);
       
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(liveX, liveY, liveWidth, liveHeight);
+      ctx.strokeRect(10, 10, headerMetrics.width + 50, 28);
       
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = 'white';
+      ctx.fillText(headerText, 20, 30);
+      
+      // Live indicator
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+      ctx.fillRect(canvas.width - 60, 10, 50, 22);
+      ctx.fillStyle = 'white';
       ctx.font = 'bold 11px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('● LIVE', liveX + liveWidth/2, liveY + 16);
+      ctx.fillText('● LIVE', canvas.width - 55, 25);
     }
   };
 
@@ -1355,26 +1152,25 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   };
 
-  // Create advanced timeline chart data with more sophisticated visualization
-  const createAdvancedTimelineChartData = (result: VideoAnalysisResult | null) => {
+  // Create simple timeline chart data focused on people count over time
+  const createTimelineChartData = (result: VideoAnalysisResult | null) => {
     if (!result?.detection_timeline) return [];
     
-    const maxSamples = 50;
+    // Take more samples for better visualization, but limit for performance
+    const maxSamples = 30;
     const timeline = result.detection_timeline;
     const step = Math.max(1, Math.floor(timeline.length / maxSamples));
     
     return timeline
       .filter((_, index) => index % step === 0)
       .slice(0, maxSamples)
-      .map((entry, index) => ({
+      .map(entry => ({
         time: `${Math.floor(entry.timestamp / 60)}:${(entry.timestamp % 60).toFixed(0).padStart(2, '0')}`,
         timeSeconds: entry.timestamp,
         people: entry.people_count,
-        confidence: entry.avg_confidence,
-        color: entry.people_count > 8 ? '#ff4444' : 
-               entry.people_count > 4 ? '#ffd700' : 
-               entry.people_count > 0 ? '#00ff88' : '#6b7280',
-        intensity: entry.people_count / (result.peak_occupancy || 1)
+        color: entry.people_count > 8 ? '#ef4444' : 
+               entry.people_count > 4 ? '#f59e0b' : 
+               entry.people_count > 0 ? '#10b981' : '#6b7280'
       }));
   };
 
@@ -1405,43 +1201,41 @@ export default function EnhancedVideoAnalyticsDashboard() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%)',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
       color: 'white',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       {/* Header */}
       <header style={{
-        background: 'rgba(10, 10, 10, 0.95)',
+        background: 'rgba(15, 23, 42, 0.9)',
         backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(0, 255, 136, 0.2)',
-        padding: '20px 30px',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+        borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+        padding: '20px 30px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Shield style={{ width: '32px', height: '32px', color: '#00ff88' }} />
+              <Shield style={{ width: '32px', height: '32px', color: '#60a5fa' }} />
               <h1 style={{
                 fontSize: '24px',
                 fontWeight: '800',
-                background: 'linear-gradient(45deg, #00ff88, #00ffff)',
+                background: 'linear-gradient(45deg, #60a5fa, #06b6d4)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 margin: 0
               }}>
-                NEURAL SURVEILLANCE MATRIX
+                AI DETECTION SYSTEM
               </h1>
             </div>
             <span style={{
               fontSize: '12px',
-              background: config.realTimeMode ? 'linear-gradient(45deg, #00ff88, #00ffff)' : '#444',
-              padding: '6px 14px',
-              borderRadius: '15px',
-              color: config.realTimeMode ? '#000' : '#fff',
-              fontWeight: '700',
-              boxShadow: config.realTimeMode ? '0 0 15px rgba(0, 255, 136, 0.5)' : 'none'
+              background: config.realTimeMode ? '#10b981' : '#6b7280',
+              padding: '4px 12px',
+              borderRadius: '12px',
+              color: 'white',
+              fontWeight: '600'
             }}>
-              {config.realTimeMode ? '● NEURAL ACTIVE' : '○ NEURAL STANDBY'}
+              {config.realTimeMode ? '● LIVE DETECTION' : '○ DETECTION OFF'}
             </span>
           </div>
           
@@ -1453,34 +1247,32 @@ export default function EnhancedVideoAnalyticsDashboard() {
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
                 style={{
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  border: '2px solid #333',
-                  background: 'rgba(0, 0, 0, 0.7)',
-                  color: '#00ff88',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #475569',
+                  background: 'rgba(30, 41, 59, 0.5)',
+                  color: 'white',
                   fontSize: '14px',
-                  width: '300px',
-                  fontFamily: 'monospace'
+                  width: '280px'
                 }}
               />
               <button
                 onClick={testApiConnection}
                 disabled={apiStatus === 'connecting'}
                 style={{
-                  padding: '10px 18px',
-                  borderRadius: '10px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
                   border: 'none',
-                  background: apiStatus === 'connected' ? 'linear-gradient(45deg, #00ff88, #00ffff)' : 'linear-gradient(45deg, #444, #666)',
-                  color: apiStatus === 'connected' ? '#000' : '#fff',
+                  background: apiStatus === 'connected' ? '#10b981' : '#3b82f6',
+                  color: 'white',
                   fontSize: '14px',
-                  fontWeight: '700',
+                  fontWeight: '600',
                   cursor: 'pointer',
-                  opacity: apiStatus === 'connecting' ? 0.7 : 1,
-                  boxShadow: apiStatus === 'connected' ? '0 0 20px rgba(0, 255, 136, 0.5)' : 'none'
+                  opacity: apiStatus === 'connecting' ? 0.7 : 1
                 }}
               >
-                {apiStatus === 'connecting' ? 'SYNCING...' : 
-                 apiStatus === 'connected' ? 'NEURAL LINK ACTIVE' : 'ESTABLISH NEURAL LINK'}
+                {apiStatus === 'connecting' ? 'Connecting...' : 
+                 apiStatus === 'connected' ? 'Connected' : 'Connect API'}
               </button>
             </div>
             
@@ -1488,47 +1280,39 @@ export default function EnhancedVideoAnalyticsDashboard() {
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '14px 22px',
-              borderRadius: '15px',
+              padding: '12px 20px',
+              borderRadius: '12px',
               background: isConnected 
-                ? 'rgba(0, 255, 136, 0.2)' 
-                : 'rgba(255, 68, 68, 0.2)',
+                ? 'rgba(16, 185, 129, 0.2)' 
+                : 'rgba(239, 68, 68, 0.2)',
               border: isConnected 
-                ? '2px solid rgba(0, 255, 136, 0.5)' 
-                : '2px solid rgba(255, 68, 68, 0.5)',
-              boxShadow: isConnected
-                ? '0 0 25px rgba(0, 255, 136, 0.3)'
-                : '0 0 25px rgba(255, 68, 68, 0.3)'
+                ? '1px solid rgba(16, 185, 129, 0.3)' 
+                : '1px solid rgba(239, 68, 68, 0.3)'
             }}>
-              {isConnected ? <CheckCircle style={{ width: '18px', height: '18px', color: '#00ff88' }} /> : <XCircle style={{ width: '18px', height: '18px', color: '#ff4444' }} />}
-              <span style={{ fontSize: '13px', fontWeight: '700', color: isConnected ? '#00ff88' : '#ff4444' }}>
-                {isConnected ? 'MATRIX ONLINE' : 'MATRIX OFFLINE'}
+              {isConnected ? <CheckCircle style={{ width: '16px', height: '16px', color: '#10b981' }} /> : <XCircle style={{ width: '16px', height: '16px', color: '#ef4444' }} />}
+              <span style={{ fontSize: '12px', fontWeight: '600', color: isConnected ? '#10b981' : '#ef4444' }}>
+                {isConnected ? 'API CONNECTED' : 'API OFFLINE'}
               </span>
             </div>
             
             <button
               onClick={toggleRealTimeDetection}
               style={{
-                padding: '12px 24px',
-                borderRadius: '12px',
+                padding: '10px 20px',
+                borderRadius: '10px',
                 border: 'none',
-                background: config.realTimeMode 
-                  ? 'linear-gradient(45deg, #ff4444, #ff6666)' 
-                  : 'linear-gradient(45deg, #00ff88, #00ffff)',
-                color: config.realTimeMode ? '#fff' : '#000',
+                background: config.realTimeMode ? '#ef4444' : '#10b981',
+                color: 'white',
                 fontSize: '14px',
-                fontWeight: '700',
+                fontWeight: '600',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                boxShadow: config.realTimeMode
-                  ? '0 0 20px rgba(255, 68, 68, 0.5)'
-                  : '0 0 20px rgba(0, 255, 136, 0.5)'
+                gap: '8px'
               }}
             >
               {config.realTimeMode ? <Pause style={{ width: '16px', height: '16px' }} /> : <Play style={{ width: '16px', height: '16px' }} />}
-              {config.realTimeMode ? 'NEURAL PAUSE' : 'NEURAL ACTIVATE'}
+              {config.realTimeMode ? 'Stop Detection' : 'Start Detection'}
             </button>
           </div>
         </div>
@@ -1540,26 +1324,24 @@ export default function EnhancedVideoAnalyticsDashboard() {
           
           {/* Feed 1 */}
           <div style={{
-            background: 'rgba(10, 10, 10, 0.8)',
+            background: 'rgba(15, 23, 42, 0.6)',
             borderRadius: '20px',
-            border: '2px solid rgba(0, 255, 136, 0.3)',
-            overflow: 'hidden',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+            border: '1px solid rgba(148, 163, 184, 0.1)',
+            overflow: 'hidden'
           }}>
-            <div style={{ padding: '20px', borderBottom: '1px solid rgba(0, 255, 136, 0.2)' }}>
+            <div style={{ padding: '20px', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Camera style={{ width: '20px', height: '20px', color: '#00ff88' }} />
-                  <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: '#00ff88' }}>NEURAL FEED ALPHA</h3>
+                  <Camera style={{ width: '20px', height: '20px', color: '#60a5fa' }} />
+                  <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Camera Feed 1</h3>
                   <span style={{
                     fontSize: '10px',
-                    background: feeds.feed1.isLiveDetection ? 'linear-gradient(45deg, #00ff88, #00ffff)' : '#444',
-                    padding: '4px 10px',
-                    borderRadius: '12px',
-                    color: feeds.feed1.isLiveDetection ? '#000' : '#fff',
-                    fontWeight: '700'
+                    background: feeds.feed1.isLiveDetection ? '#10b981' : '#6b7280',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    color: 'white'
                   }}>
-                    {feeds.feed1.isLiveDetection ? 'NEURAL ACTIVE' : feeds.feed1.isStreaming ? 'STREAMING' : 'OFFLINE'}
+                    {feeds.feed1.isLiveDetection ? 'DETECTING' : feeds.feed1.isStreaming ? 'STREAMING' : 'OFFLINE'}
                   </span>
                 </div>
                 <button
@@ -1568,10 +1350,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     padding: '8px 16px',
                     borderRadius: '8px',
                     border: 'none',
-                    background: feeds.feed1.isStreaming 
-                      ? 'linear-gradient(45deg, #ff4444, #ff6666)' 
-                      : 'linear-gradient(45deg, #00ff88, #00ffff)',
-                    color: feeds.feed1.isStreaming ? '#fff' : '#000',
+                    background: feeds.feed1.isStreaming ? '#ef4444' : '#10b981',
+                    color: 'white',
                     fontSize: '12px',
                     fontWeight: '600',
                     cursor: 'pointer',
@@ -1581,7 +1361,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   }}
                 >
                   {feeds.feed1.isStreaming ? <VideoOff style={{ width: '14px', height: '14px' }} /> : <Video style={{ width: '14px', height: '14px' }} />}
-                  {feeds.feed1.isStreaming ? 'DISCONNECT' : 'CONNECT'}
+                  {feeds.feed1.isStreaming ? 'Stop' : 'Start'}
                 </button>
               </div>
             </div>
@@ -1596,12 +1376,12 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                   onTimeUpdate={() => {
                     if (videoAnalysisResults.feed1?.detection_timeline) {
-                      drawAdvancedVideoAnalysisResults(videoAnalysisResults.feed1.detection_timeline, 'feed1');
+                      drawVideoAnalysisResults(videoAnalysisResults.feed1.detection_timeline, 'feed1');
                     }
                   }}
                   onSeeked={() => {
                     if (videoAnalysisResults.feed1?.detection_timeline) {
-                      drawAdvancedVideoAnalysisResults(videoAnalysisResults.feed1.detection_timeline, 'feed1');
+                      drawVideoAnalysisResults(videoAnalysisResults.feed1.detection_timeline, 'feed1');
                     }
                   }}
                 />
@@ -1634,11 +1414,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: 'linear-gradient(135deg, #0a0a0a, #1a1a2e)'
+                  background: 'linear-gradient(135deg, #0f172a, #1e293b)'
                 }}>
                   <div style={{ textAlign: 'center' }}>
-                    <Camera style={{ width: '48px', height: '48px', color: '#333', margin: '0 auto 16px' }} />
-                    <p style={{ color: '#666', margin: 0 }}>Neural feed offline</p>
+                    <Camera style={{ width: '48px', height: '48px', color: '#475569', margin: '0 auto 16px' }} />
+                    <p style={{ color: '#64748b', margin: 0 }}>Start camera or upload video</p>
                   </div>
                 </div>
               )}
@@ -1647,23 +1427,21 @@ export default function EnhancedVideoAnalyticsDashboard() {
               {(feeds.feed1.isStreaming || videoPreview.feed1) && (
                 <div style={{ position: 'absolute', bottom: '16px', left: '16px' }}>
                   <div style={{
-                    background: 'rgba(0, 0, 0, 0.9)',
+                    background: 'rgba(0, 0, 0, 0.8)',
                     color: 'white',
                     padding: '12px 16px',
                     borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    border: '2px solid #00ff88',
-                    boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)'
+                    gap: '8px'
                   }}>
-                    <Users style={{ width: '16px', height: '16px', color: '#00ff88' }} />
+                    <Users style={{ width: '16px', height: '16px', color: '#60a5fa' }} />
                     <div>
-                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#00ff88' }}>
+                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#60a5fa' }}>
                         {videoAnalysisResults.feed1?.peak_occupancy || feeds.feed1.currentCount}
                       </div>
                       <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                        {videoPreview.feed1 ? 'PEAK NEURAL' : 'LIVE NEURAL'}
+                        {videoPreview.feed1 ? 'PEAK' : 'LIVE'}
                       </div>
                     </div>
                   </div>
@@ -1671,63 +1449,67 @@ export default function EnhancedVideoAnalyticsDashboard() {
               )}
             </div>
             
-            {/* Enhanced Heatmap View Below Main Video */}
-            <div style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                <div style={{ 
-                  width: '15px', 
-                  height: '15px', 
-                  background: 'linear-gradient(45deg, #ff6b35, #ff0080)', 
-                  borderRadius: '3px',
-                  boxShadow: '0 0 10px rgba(255, 107, 53, 0.5)'
-                }}></div>
-                <h5 style={{ fontSize: '14px', fontWeight: '700', margin: 0, color: '#ff6b35' }}>🔥 NEURAL ACTIVITY HEATMAP</h5>
-              </div>
-              <div style={{ 
-                position: 'relative', 
-                aspectRatio: '16/9', 
-                background: 'rgba(0, 0, 0, 0.9)', 
-                borderRadius: '12px', 
-                overflow: 'hidden',
-                border: '2px solid rgba(255, 107, 53, 0.3)',
-                boxShadow: '0 0 25px rgba(255, 107, 53, 0.2)'
-              }}>
-                {videoPreview.feed1 ? (
-                  <video
-                    ref={uploadVideoRef1}
-                    src={videoPreview.feed1}
-                    muted
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.2 }}
+            {/* Heatmap View Below Main Video */}
+            {(feeds.feed1.isStreaming || videoPreview.feed1) && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ width: '12px', height: '12px', background: 'linear-gradient(45deg, #ff6b35, #f59e0b)', borderRadius: '2px' }}></div>
+                  <h5 style={{ fontSize: '12px', fontWeight: '600', margin: 0, color: '#ff6b35' }}>Activity Heatmap</h5>
+                </div>
+                <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+                  {videoPreview.feed1 ? (
+                    <video
+                      ref={uploadVideoRef1}
+                      src={videoPreview.feed1}
+                      muted
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.3 }}
+                    />
+                  ) : (
+                    <video
+                      ref={heatmapVideoRef1}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.3 }}
+                    />
+                  )}
+                  
+                  <canvas
+                    ref={heatmapCanvasRef1}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none'
+                    }}
                   />
-                ) : (
-                  <video
-                    ref={heatmapVideoRef1}
-                    autoPlay
-                    muted
-                    playsInline
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.2 }}
-                  />
-                )}
-                
-                <canvas
-                  ref={heatmapCanvasRef1}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    pointerEvents: 'none'
-                  }}
-                />
+                  
+                  {!feeds.feed1.isStreaming && !videoPreview.feed1 && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(135deg, #0f172a, #1e293b)'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔥</div>
+                        <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>Heatmap will appear during detection</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             
             {/* Video Upload Section for Feed 1 */}
-            <div style={{ padding: '20px', borderTop: '1px solid rgba(0, 255, 136, 0.2)' }}>
+            <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                 <FileVideo style={{ width: '16px', height: '16px', color: '#8b5cf6' }} />
-                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: 0 }}>Neural Upload Protocol</h4>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: 0 }}>Video Upload</h4>
               </div>
               
               {!uploadedFiles.feed1 ? (
@@ -1737,10 +1519,10 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     disabled={!isConnected}
                     style={{
                       flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
                       border: 'none',
-                      background: isConnected ? 'linear-gradient(45deg, #8b5cf6, #a855f7)' : '#444',
+                      background: isConnected ? '#8b5cf6' : '#6b7280',
                       color: 'white',
                       fontSize: '12px',
                       fontWeight: '600',
@@ -1752,7 +1534,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     }}
                   >
                     <Upload style={{ width: '14px', height: '14px' }} />
-                    NEURAL UPLOAD
+                    Choose Video
                   </button>
                 </div>
               ) : (
@@ -1767,7 +1549,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         padding: '6px 10px',
                         borderRadius: '6px',
                         border: 'none',
-                        background: isProcessingVideo.feed1 || !isConnected ? '#444' : 'linear-gradient(45deg, #8b5cf6, #a855f7)',
+                        background: isProcessingVideo.feed1 || !isConnected ? '#6b7280' : '#8b5cf6',
                         color: 'white',
                         fontSize: '11px',
                         fontWeight: '600',
@@ -1786,7 +1568,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       ) : (
                         <>
                           <Play style={{ width: '12px', height: '12px' }} />
-                          NEURAL ANALYZE
+                          Analyze
                         </>
                       )}
                     </button>
@@ -1809,19 +1591,18 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     <div style={{ marginTop: '8px' }}>
                       <div style={{
                         width: '100%',
-                        background: 'rgba(0, 0, 0, 0.5)',
+                        background: 'rgba(30, 41, 59, 0.5)',
                         borderRadius: '4px',
-                        height: '6px',
+                        height: '4px',
                         overflow: 'hidden'
                       }}>
                         <div 
                           style={{
-                            background: 'linear-gradient(45deg, #8b5cf6, #a855f7)',
+                            background: '#8b5cf6',
                             height: '100%',
                             borderRadius: '4px',
                             transition: 'width 0.5s ease',
-                            width: `${processingProgress.feed1}%`,
-                            boxShadow: '0 0 10px rgba(139, 92, 246, 0.5)'
+                            width: `${processingProgress.feed1}%`
                           }}
                         ></div>
                       </div>
@@ -1834,7 +1615,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   )}
                   
                   {processingError.feed1 && (
-                    <div style={{ fontSize: '10px', color: '#ff4444', marginTop: '4px' }}>
+                    <div style={{ fontSize: '10px', color: '#ef4444', marginTop: '4px' }}>
                       {processingError.feed1}
                     </div>
                   )}
@@ -1851,28 +1632,26 @@ export default function EnhancedVideoAnalyticsDashboard() {
             </div>
           </div>
 
-          {/* Feed 2 - Similar structure with different colors */}
+          {/* Feed 2 */}
           <div style={{
-            background: 'rgba(10, 10, 10, 0.8)',
+            background: 'rgba(15, 23, 42, 0.6)',
             borderRadius: '20px',
-            border: '2px solid rgba(0, 255, 255, 0.3)',
-            overflow: 'hidden',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+            border: '1px solid rgba(148, 163, 184, 0.1)',
+            overflow: 'hidden'
           }}>
-            <div style={{ padding: '20px', borderBottom: '1px solid rgba(0, 255, 255, 0.2)' }}>
+            <div style={{ padding: '20px', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Camera style={{ width: '20px', height: '20px', color: '#00ffff' }} />
-                  <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: '#00ffff' }}>NEURAL FEED BETA</h3>
+                  <Camera style={{ width: '20px', height: '20px', color: '#10b981' }} />
+                  <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Camera Feed 2</h3>
                   <span style={{
                     fontSize: '10px',
-                    background: feeds.feed2.isLiveDetection ? 'linear-gradient(45deg, #00ffff, #0080ff)' : '#444',
-                    padding: '4px 10px',
-                    borderRadius: '12px',
-                    color: feeds.feed2.isLiveDetection ? '#000' : '#fff',
-                    fontWeight: '700'
+                    background: feeds.feed2.isLiveDetection ? '#10b981' : '#6b7280',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    color: 'white'
                   }}>
-                    {feeds.feed2.isLiveDetection ? 'NEURAL ACTIVE' : feeds.feed2.isStreaming ? 'STREAMING' : 'OFFLINE'}
+                    {feeds.feed2.isLiveDetection ? 'DETECTING' : feeds.feed2.isStreaming ? 'STREAMING' : 'OFFLINE'}
                   </span>
                 </div>
                 <button
@@ -1881,10 +1660,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     padding: '8px 16px',
                     borderRadius: '8px',
                     border: 'none',
-                    background: feeds.feed2.isStreaming 
-                      ? 'linear-gradient(45deg, #ff4444, #ff6666)' 
-                      : 'linear-gradient(45deg, #00ffff, #0080ff)',
-                    color: feeds.feed2.isStreaming ? '#fff' : '#000',
+                    background: feeds.feed2.isStreaming ? '#ef4444' : '#10b981',
+                    color: 'white',
                     fontSize: '12px',
                     fontWeight: '600',
                     cursor: 'pointer',
@@ -1894,7 +1671,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   }}
                 >
                   {feeds.feed2.isStreaming ? <VideoOff style={{ width: '14px', height: '14px' }} /> : <Video style={{ width: '14px', height: '14px' }} />}
-                  {feeds.feed2.isStreaming ? 'DISCONNECT' : 'CONNECT'}
+                  {feeds.feed2.isStreaming ? 'Stop' : 'Start'}
                 </button>
               </div>
             </div>
@@ -1909,12 +1686,12 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                   onTimeUpdate={() => {
                     if (videoAnalysisResults.feed2?.detection_timeline) {
-                      drawAdvancedVideoAnalysisResults(videoAnalysisResults.feed2.detection_timeline, 'feed2');
+                      drawVideoAnalysisResults(videoAnalysisResults.feed2.detection_timeline, 'feed2');
                     }
                   }}
                   onSeeked={() => {
                     if (videoAnalysisResults.feed2?.detection_timeline) {
-                      drawAdvancedVideoAnalysisResults(videoAnalysisResults.feed2.detection_timeline, 'feed2');
+                      drawVideoAnalysisResults(videoAnalysisResults.feed2.detection_timeline, 'feed2');
                     }
                   }}
                 />
@@ -1947,11 +1724,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: 'linear-gradient(135deg, #0a0a0a, #1a1a2e)'
+                  background: 'linear-gradient(135deg, #0f172a, #1e293b)'
                 }}>
                   <div style={{ textAlign: 'center' }}>
-                    <Camera style={{ width: '48px', height: '48px', color: '#333', margin: '0 auto 16px' }} />
-                    <p style={{ color: '#666', margin: 0 }}>Neural feed offline</p>
+                    <Camera style={{ width: '48px', height: '48px', color: '#475569', margin: '0 auto 16px' }} />
+                    <p style={{ color: '#64748b', margin: 0 }}>Start camera or upload video</p>
                   </div>
                 </div>
               )}
@@ -1960,23 +1737,21 @@ export default function EnhancedVideoAnalyticsDashboard() {
               {(feeds.feed2.isStreaming || videoPreview.feed2) && (
                 <div style={{ position: 'absolute', bottom: '16px', left: '16px' }}>
                   <div style={{
-                    background: 'rgba(0, 0, 0, 0.9)',
+                    background: 'rgba(0, 0, 0, 0.8)',
                     color: 'white',
                     padding: '12px 16px',
                     borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    border: '2px solid #00ffff',
-                    boxShadow: '0 0 20px rgba(0, 255, 255, 0.5)'
+                    gap: '8px'
                   }}>
-                    <Users style={{ width: '16px', height: '16px', color: '#00ffff' }} />
+                    <Users style={{ width: '16px', height: '16px', color: '#10b981' }} />
                     <div>
-                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#00ffff' }}>
+                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>
                         {videoAnalysisResults.feed2?.peak_occupancy || feeds.feed2.currentCount}
                       </div>
                       <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                        {videoPreview.feed2 ? 'PEAK NEURAL' : 'LIVE NEURAL'}
+                        {videoPreview.feed2 ? 'PEAK' : 'LIVE'}
                       </div>
                     </div>
                   </div>
@@ -1984,63 +1759,67 @@ export default function EnhancedVideoAnalyticsDashboard() {
               )}
             </div>
             
-            {/* Enhanced Heatmap View Below Main Video */}
-            <div style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                <div style={{ 
-                  width: '15px', 
-                  height: '15px', 
-                  background: 'linear-gradient(45deg, #ff6b35, #ff0080)', 
-                  borderRadius: '3px',
-                  boxShadow: '0 0 10px rgba(255, 107, 53, 0.5)'
-                }}></div>
-                <h5 style={{ fontSize: '14px', fontWeight: '700', margin: 0, color: '#ff6b35' }}>🔥 NEURAL ACTIVITY HEATMAP</h5>
-              </div>
-              <div style={{ 
-                position: 'relative', 
-                aspectRatio: '16/9', 
-                background: 'rgba(0, 0, 0, 0.9)', 
-                borderRadius: '12px', 
-                overflow: 'hidden',
-                border: '2px solid rgba(255, 107, 53, 0.3)',
-                boxShadow: '0 0 25px rgba(255, 107, 53, 0.2)'
-              }}>
-                {videoPreview.feed2 ? (
-                  <video
-                    ref={uploadVideoRef2}
-                    src={videoPreview.feed2}
-                    muted
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.2 }}
+            {/* Heatmap View Below Main Video */}
+            {(feeds.feed2.isStreaming || videoPreview.feed2) && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ width: '12px', height: '12px', background: 'linear-gradient(45deg, #ff6b35, #f59e0b)', borderRadius: '2px' }}></div>
+                  <h5 style={{ fontSize: '12px', fontWeight: '600', margin: 0, color: '#ff6b35' }}>Activity Heatmap</h5>
+                </div>
+                <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+                  {videoPreview.feed2 ? (
+                    <video
+                      ref={uploadVideoRef2}
+                      src={videoPreview.feed2}
+                      muted
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.3 }}
+                    />
+                  ) : (
+                    <video
+                      ref={heatmapVideoRef2}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.3 }}
+                    />
+                  )}
+                  
+                  <canvas
+                    ref={heatmapCanvasRef2}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none'
+                    }}
                   />
-                ) : (
-                  <video
-                    ref={heatmapVideoRef2}
-                    autoPlay
-                    muted
-                    playsInline
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.2 }}
-                  />
-                )}
-                
-                <canvas
-                  ref={heatmapCanvasRef2}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    pointerEvents: 'none'
-                  }}
-                />
+                  
+                  {!feeds.feed2.isStreaming && !videoPreview.feed2 && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(135deg, #0f172a, #1e293b)'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔥</div>
+                        <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>Heatmap will appear during detection</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             
             {/* Video Upload Section for Feed 2 */}
-            <div style={{ padding: '20px', borderTop: '1px solid rgba(0, 255, 255, 0.2)' }}>
+            <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                 <FileVideo style={{ width: '16px', height: '16px', color: '#8b5cf6' }} />
-                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: 0 }}>Neural Upload Protocol</h4>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: 0 }}>Video Upload</h4>
               </div>
               
               {!uploadedFiles.feed2 ? (
@@ -2050,10 +1829,10 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     disabled={!isConnected}
                     style={{
                       flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
                       border: 'none',
-                      background: isConnected ? 'linear-gradient(45deg, #8b5cf6, #a855f7)' : '#444',
+                      background: isConnected ? '#8b5cf6' : '#6b7280',
                       color: 'white',
                       fontSize: '12px',
                       fontWeight: '600',
@@ -2065,7 +1844,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     }}
                   >
                     <Upload style={{ width: '14px', height: '14px' }} />
-                    NEURAL UPLOAD
+                    Choose Video
                   </button>
                 </div>
               ) : (
@@ -2080,7 +1859,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         padding: '6px 10px',
                         borderRadius: '6px',
                         border: 'none',
-                        background: isProcessingVideo.feed2 || !isConnected ? '#444' : 'linear-gradient(45deg, #8b5cf6, #a855f7)',
+                        background: isProcessingVideo.feed2 || !isConnected ? '#6b7280' : '#8b5cf6',
                         color: 'white',
                         fontSize: '11px',
                         fontWeight: '600',
@@ -2099,7 +1878,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       ) : (
                         <>
                           <Play style={{ width: '12px', height: '12px' }} />
-                          NEURAL ANALYZE
+                          Analyze
                         </>
                       )}
                     </button>
@@ -2122,19 +1901,18 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     <div style={{ marginTop: '8px' }}>
                       <div style={{
                         width: '100%',
-                        background: 'rgba(0, 0, 0, 0.5)',
+                        background: 'rgba(30, 41, 59, 0.5)',
                         borderRadius: '4px',
-                        height: '6px',
+                        height: '4px',
                         overflow: 'hidden'
                       }}>
                         <div 
                           style={{
-                            background: 'linear-gradient(45deg, #8b5cf6, #a855f7)',
+                            background: '#8b5cf6',
                             height: '100%',
                             borderRadius: '4px',
                             transition: 'width 0.5s ease',
-                            width: `${processingProgress.feed2}%`,
-                            boxShadow: '0 0 10px rgba(139, 92, 246, 0.5)'
+                            width: `${processingProgress.feed2}%`
                           }}
                         ></div>
                       </div>
@@ -2147,7 +1925,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   )}
                   
                   {processingError.feed2 && (
-                    <div style={{ fontSize: '10px', color: '#ff4444', marginTop: '4px' }}>
+                    <div style={{ fontSize: '10px', color: '#ef4444', marginTop: '4px' }}>
                       {processingError.feed2}
                     </div>
                   )}
@@ -2169,80 +1947,75 @@ export default function EnhancedVideoAnalyticsDashboard() {
             
             {/* Quick Stats */}
             <div style={{
-              background: 'rgba(10, 10, 10, 0.8)',
+              background: 'rgba(15, 23, 42, 0.6)',
               borderRadius: '16px',
-              border: '2px solid rgba(0, 255, 136, 0.3)',
-              padding: '20px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '20px'
             }}>
               <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <BarChart3 style={{ width: '16px', height: '16px', color: '#00ff88' }} />
-                Neural Analytics
+                <BarChart3 style={{ width: '16px', height: '16px', color: '#60a5fa' }} />
+                Live Stats
               </h4>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{
-                  background: 'rgba(0, 0, 0, 0.6)',
+                  background: 'rgba(30, 41, 59, 0.5)',
                   borderRadius: '8px',
                   padding: '12px',
-                  border: '2px solid rgba(0, 255, 136, 0.4)',
-                  boxShadow: '0 0 15px rgba(0, 255, 136, 0.2)'
+                  border: '1px solid rgba(59, 130, 246, 0.2)'
                 }}>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#00ff88', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#60a5fa', marginBottom: '4px' }}>
                     {feeds.feed1.currentCount + feeds.feed2.currentCount}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>ACTIVE NEURAL TARGETS</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>CURRENT TOTAL</div>
                 </div>
                 
                 <div style={{
-                  background: 'rgba(0, 0, 0, 0.6)',
+                  background: 'rgba(30, 41, 59, 0.5)',
                   borderRadius: '8px',
                   padding: '12px',
-                  border: '2px solid rgba(0, 255, 255, 0.4)',
-                  boxShadow: '0 0 15px rgba(0, 255, 255, 0.2)'
+                  border: '1px solid rgba(16, 185, 129, 0.2)'
                 }}>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#00ffff', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#10b981', marginBottom: '4px' }}>
                     {analytics.peakOccupancy}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>PEAK NEURAL COUNT</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>PEAK COUNT</div>
                 </div>
 
                 <div style={{
-                  background: 'rgba(0, 0, 0, 0.6)',
+                  background: 'rgba(30, 41, 59, 0.5)',
                   borderRadius: '8px',
                   padding: '12px',
-                  border: '2px solid rgba(255, 0, 128, 0.4)',
-                  boxShadow: '0 0 15px rgba(255, 0, 128, 0.2)'
+                  border: '1px solid rgba(139, 92, 246, 0.2)'
                 }}>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#ff0080', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
                     {Math.max(
                       videoAnalysisResults.feed1?.peak_occupancy || 0,
                       videoAnalysisResults.feed2?.peak_occupancy || 0
                     )}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>VIDEO NEURAL PEAK</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>VIDEO PEAK</div>
                 </div>
               </div>
             </div>
 
             {/* Configuration */}
             <div style={{
-              background: 'rgba(10, 10, 10, 0.8)',
+              background: 'rgba(15, 23, 42, 0.6)',
               borderRadius: '16px',
-              border: '2px solid rgba(139, 92, 246, 0.3)',
-              padding: '20px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '20px'
             }}>
               <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Settings style={{ width: '16px', height: '16px', color: '#a855f7' }} />
-                Neural Configuration
+                Settings
               </h4>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#cbd5e1' }}>Neural Sensitivity</label>
-                    <span style={{ color: '#a855f7', fontSize: '14px', fontWeight: '700' }}>{(config.confidence * 100).toFixed(0)}%</span>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#cbd5e1' }}>Detection Confidence</label>
+                    <span style={{ color: '#06b6d4', fontSize: '14px', fontWeight: '700' }}>{(config.confidence * 100).toFixed(0)}%</span>
                   </div>
                   <input
                     type="range"
@@ -2253,12 +2026,12 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     onChange={(e) => setConfig({...config, confidence: parseFloat(e.target.value)})}
                     style={{
                       width: '100%',
-                      height: '6px',
-                      background: 'linear-gradient(to right, #333, #a855f7)',
-                      borderRadius: '3px',
+                      height: '4px',
+                      background: '#374151',
+                      borderRadius: '4px',
                       appearance: 'none',
                       cursor: 'pointer',
-                      accentColor: '#a855f7'
+                      accentColor: '#06b6d4'
                     }}
                   />
                 </div>
@@ -2269,9 +2042,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       type="checkbox"
                       checked={config.showBoundingBoxes}
                       onChange={(e) => setConfig({...config, showBoundingBoxes: e.target.checked})}
-                      style={{ accentColor: '#a855f7' }}
+                      style={{ accentColor: '#06b6d4' }}
                     />
-                    Neural Target Boxes
+                    Show Bounding Boxes
                   </label>
                 </div>
                 
@@ -2281,33 +2054,32 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       type="checkbox"
                       checked={config.alertEnabled}
                       onChange={(e) => setConfig({...config, alertEnabled: e.target.checked})}
-                      style={{ accentColor: '#a855f7' }}
+                      style={{ accentColor: '#06b6d4' }}
                     />
-                    Neural Alerts
+                    Enable Alerts
                   </label>
                 </div>
                 
                 {/* Heatmap controls */}
                 <div style={{ 
                   padding: '12px', 
-                  background: 'rgba(0, 0, 0, 0.6)', 
+                  background: 'rgba(30, 41, 59, 0.5)', 
                   borderRadius: '8px',
-                  border: '2px solid rgba(255, 107, 53, 0.4)',
-                  boxShadow: '0 0 15px rgba(255, 107, 53, 0.2)'
+                  border: '1px solid rgba(255, 107, 53, 0.3)'
                 }}>
-                  <h4 style={{ fontSize: '12px', fontWeight: '600', color: '#ff6b35', margin: '0 0 8px 0' }}>🔥 Neural Heatmap Control</h4>
+                  <h4 style={{ fontSize: '12px', fontWeight: '600', color: '#ff6b35', margin: '0 0 8px 0' }}>🔥 Heatmap Controls</h4>
                   
                   <button
                     onClick={() => {
                       setHeatmapData({ feed1: {}, feed2: {} });
-                      console.log('Neural heatmap data purged');
+                      console.log('Heatmap data cleared for both feeds');
                     }}
                     style={{
                       width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
                       border: 'none',
-                      background: 'linear-gradient(45deg, #666, #888)',
+                      background: '#6b7280',
                       color: 'white',
                       fontSize: '11px',
                       fontWeight: '600',
@@ -2315,11 +2087,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       marginBottom: '8px'
                     }}
                   >
-                    PURGE NEURAL DATA
+                    Clear All Heatmap Data
                   </button>
                   
                   <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                    Neural heatmaps visualize activity density. High-activity zones glow red.
+                    Heatmaps show activity density over time. Red areas indicate high activity zones.
                   </div>
                 </div>
               </div>
@@ -2327,22 +2099,21 @@ export default function EnhancedVideoAnalyticsDashboard() {
 
             {/* System Status & Alerts */}
             <div style={{
-              background: 'rgba(10, 10, 10, 0.8)',
+              background: 'rgba(15, 23, 42, 0.6)',
               borderRadius: '16px',
-              border: '2px solid rgba(255, 68, 68, 0.3)',
-              padding: '20px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '20px'
             }}>
               <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertTriangle style={{ width: '16px', height: '16px', color: '#ff4444' }} />
-                Neural System Status
+                <AlertTriangle style={{ width: '16px', height: '16px', color: '#ea580c' }} />
+                System Status
               </h4>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto' }}>
                 {alerts && alerts.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '20px' }}>
-                    <CheckCircle style={{ width: '32px', height: '32px', color: '#00ff88', margin: '0 auto 12px' }} />
-                    <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>All neural systems operational</p>
+                    <CheckCircle style={{ width: '32px', height: '32px', color: '#10b981', margin: '0 auto 12px' }} />
+                    <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>All systems operational</p>
                   </div>
                 ) : (
                   (alerts || []).map((alert) => (
@@ -2350,23 +2121,16 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       key={alert.id}
                       style={{
                         padding: '10px',
-                        borderRadius: '8px',
-                        borderLeft: `4px solid ${
+                        borderRadius: '6px',
+                        borderLeft: `3px solid ${
                           alert.severity === 'high' 
-                            ? '#ff4444' 
+                            ? '#ef4444' 
                             : alert.severity === 'medium'
-                            ? '#ffd700'
-                            : '#00ff88'
+                            ? '#fbbf24'
+                            : '#10b981'
                         }`,
-                        background: 'rgba(0, 0, 0, 0.6)',
-                        border: '1px solid rgba(71, 85, 105, 0.3)',
-                        boxShadow: `0 0 10px ${
-                          alert.severity === 'high' 
-                            ? 'rgba(255, 68, 68, 0.3)' 
-                            : alert.severity === 'medium'
-                            ? 'rgba(255, 215, 0, 0.3)'
-                            : 'rgba(0, 255, 136, 0.3)'
-                        }`
+                        background: 'rgba(30, 41, 59, 0.3)',
+                        border: '1px solid rgba(71, 85, 105, 0.3)'
                       }}
                     >
                       <div style={{ fontSize: '11px', fontWeight: '600', color: 'white', marginBottom: '4px' }}>{alert.message}</div>
@@ -2382,21 +2146,20 @@ export default function EnhancedVideoAnalyticsDashboard() {
           </div>
         </div>
 
-        {/* Enhanced Video Analysis Section with Advanced Charts */}
+        {/* Simplified Timeline Analysis Section */}
         {(videoAnalysisResults.feed1 || videoAnalysisResults.feed2) && (
           <div style={{ marginTop: '30px' }}>
             <div style={{
-              background: 'rgba(10, 10, 10, 0.8)',
+              background: 'rgba(15, 23, 42, 0.6)',
               borderRadius: '20px',
-              border: '2px solid rgba(0, 255, 136, 0.3)',
-              padding: '30px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '30px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '30px' }}>
-                <BarChart3 style={{ width: '24px', height: '24px', color: '#00ff88' }} />
+                <BarChart3 style={{ width: '24px', height: '24px', color: '#06b6d4' }} />
                 <div>
-                  <h3 style={{ fontSize: '24px', fontWeight: '700', margin: 0, color: '#00ff88' }}>Neural Pattern Analysis</h3>
-                  <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Advanced crowd dynamics visualization</p>
+                  <h3 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Video Analysis</h3>
+                  <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>People count over time</p>
                 </div>
               </div>
               
@@ -2406,15 +2169,15 @@ export default function EnhancedVideoAnalyticsDashboard() {
                 {videoAnalysisResults.feed1 && (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#00ff88' }}>Neural Feed Alpha Analytics</h4>
+                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#60a5fa' }}>Feed 1 Timeline</h4>
                       <button
                         onClick={() => downloadVideoResults('feed1')}
                         style={{
                           padding: '8px 16px',
                           borderRadius: '8px',
                           border: 'none',
-                          background: 'linear-gradient(45deg, #00ff88, #00ffff)',
-                          color: '#000',
+                          background: '#3b82f6',
+                          color: 'white',
                           fontSize: '12px',
                           fontWeight: '600',
                           cursor: 'pointer',
@@ -2424,35 +2187,34 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         }}
                       >
                         <Download style={{ width: '14px', height: '14px' }} />
-                        Export Neural Data
+                        Download Data
                       </button>
                     </div>
                     
-                    {/* Advanced Crowd Flow Analysis */}
+                    {/* Advanced Timeline Analysis */}
                     <div style={{
-                      background: 'rgba(0, 0, 0, 0.6)',
+                      background: 'rgba(30, 41, 59, 0.5)',
                       borderRadius: '12px',
                       padding: '20px',
-                      marginBottom: '20px',
-                      border: '2px solid rgba(0, 255, 136, 0.2)'
+                      marginBottom: '20px'
                     }}>
-                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#00ff88', margin: '0 0 20px 0' }}>
-                        Neural Flow Dynamics
+                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 20px 0' }}>
+                        Activity Analysis
                       </h5>
                       
                       {videoAnalysisResults.feed1.detection_timeline && (
                         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
                           
-                          {/* Advanced Area Chart Visualization */}
+                          {/* Line Chart Visualization */}
                           <div>
-                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Crowd Density Over Time</h6>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>People Count Timeline</h6>
                             <div style={{ 
                               position: 'relative',
-                              height: '150px', 
-                              background: 'rgba(0, 0, 0, 0.8)',
+                              height: '120px', 
+                              background: 'rgba(15, 23, 42, 0.5)',
                               borderRadius: '8px',
                               padding: '16px',
-                              border: '1px solid rgba(0, 255, 136, 0.3)'
+                              border: '1px solid rgba(59, 130, 246, 0.2)'
                             }}>
                               <svg width="100%" height="100%" style={{ overflow: 'visible' }}>
                                 {/* Grid lines */}
@@ -2463,40 +2225,18 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                     y1={`${y}%`} 
                                     x2="100%" 
                                     y2={`${y}%`} 
-                                    stroke="rgba(0, 255, 136, 0.1)" 
+                                    stroke="rgba(148, 163, 184, 0.1)" 
                                     strokeWidth="1"
                                   />
                                 ))}
                                 
-                                {/* Area fill */}
-                                <defs>
-                                  <linearGradient id="areaGradient1" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stopColor="rgba(0, 255, 136, 0.3)" />
-                                    <stop offset="100%" stopColor="rgba(0, 255, 136, 0.05)" />
-                                  </linearGradient>
-                                </defs>
-                                
-                                <polygon
-                                  fill="url(#areaGradient1)"
-                                  points={
-                                    createAdvancedTimelineChartData(videoAnalysisResults.feed1)
-                                      .map((entry, index, arr) => {
-                                        const x = (index / (arr.length - 1)) * 100;
-                                        const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
-                                        return `${x},${y}`;
-                                      })
-                                      .concat(['100,100', '0,100'])
-                                      .join(' ')
-                                  }
-                                />
-                                
-                                {/* Main line */}
+                                {/* Data line */}
                                 <polyline
                                   fill="none"
-                                  stroke="#00ff88"
-                                  strokeWidth="3"
+                                  stroke="#60a5fa"
+                                  strokeWidth="2"
                                   points={
-                                    createAdvancedTimelineChartData(videoAnalysisResults.feed1)
+                                    createTimelineChartData(videoAnalysisResults.feed1)
                                       .map((entry, index, arr) => {
                                         const x = (index / (arr.length - 1)) * 100;
                                         const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
@@ -2506,36 +2246,26 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   }
                                 />
                                 
-                                {/* Enhanced data points */}
-                                {createAdvancedTimelineChartData(videoAnalysisResults.feed1).map((entry, index, arr) => {
+                                {/* Data points */}
+                                {createTimelineChartData(videoAnalysisResults.feed1).map((entry, index, arr) => {
                                   const x = (index / (arr.length - 1)) * 100;
                                   const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
                                   return (
-                                    <g key={index}>
-                                      <circle
-                                        cx={`${x}%`}
-                                        cy={`${y}%`}
-                                        r="4"
-                                        fill={entry.color}
-                                        stroke="white"
-                                        strokeWidth="2"
-                                      />
-                                      <circle
-                                        cx={`${x}%`}
-                                        cy={`${y}%`}
-                                        r="8"
-                                        fill="none"
-                                        stroke={entry.color}
-                                        strokeWidth="1"
-                                        opacity="0.5"
-                                      />
-                                    </g>
+                                    <circle
+                                      key={index}
+                                      cx={`${x}%`}
+                                      cy={`${y}%`}
+                                      r="3"
+                                      fill={entry.color}
+                                      stroke="white"
+                                      strokeWidth="1"
+                                    />
                                   );
                                 })}
                               </svg>
                               
-                              {/* Enhanced Y-axis labels */}
-                              <div style={{ position: 'absolute', left: '-15px', top: '0', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: '#00ff88', fontWeight: '600' }}>
+                              {/* Y-axis labels */}
+                              <div style={{ position: 'absolute', left: '-10px', top: '0', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: '#64748b' }}>
                                 <span>{videoAnalysisResults.feed1.peak_occupancy}</span>
                                 <span>{Math.floor(videoAnalysisResults.feed1.peak_occupancy * 0.75)}</span>
                                 <span>{Math.floor(videoAnalysisResults.feed1.peak_occupancy * 0.5)}</span>
@@ -2545,21 +2275,20 @@ export default function EnhancedVideoAnalyticsDashboard() {
                             </div>
                           </div>
                           
-                          {/* Enhanced Activity Patterns */}
+                          {/* Activity Patterns */}
                           <div>
-                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Crowd Behavior Patterns</h6>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Activity Patterns</h6>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               
-                              {/* Critical Activity */}
+                              {/* Peak Activity */}
                               <div style={{ 
-                                background: 'linear-gradient(135deg, rgba(255, 68, 68, 0.15), rgba(255, 68, 68, 0.05))', 
-                                border: '2px solid rgba(255, 68, 68, 0.4)',
-                                borderRadius: '8px', 
-                                padding: '10px',
-                                boxShadow: '0 0 15px rgba(255, 68, 68, 0.2)'
+                                background: 'rgba(239, 68, 68, 0.1)', 
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
                               }}>
-                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ff4444' }}>🚨 Critical Density</div>
-                                <div style={{ fontSize: '20px', fontWeight: '700', color: '#ff4444' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ef4444' }}>Peak Activity</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444' }}>
                                   {videoAnalysisResults.feed1.peak_occupancy} people
                                 </div>
                                 <div style={{ fontSize: '9px', color: '#fca5a5' }}>
@@ -2573,39 +2302,37 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                 </div>
                               </div>
                               
-                              {/* Flow Rate */}
+                              {/* Average Activity */}
                               <div style={{ 
-                                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 215, 0, 0.05))', 
-                                border: '2px solid rgba(255, 215, 0, 0.4)',
-                                borderRadius: '8px', 
-                                padding: '10px',
-                                boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'
+                                background: 'rgba(245, 158, 11, 0.1)', 
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
                               }}>
-                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ffd700' }}>⚡ Average Flow</div>
-                                <div style={{ fontSize: '20px', fontWeight: '700', color: '#ffd700' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#f59e0b' }}>Average</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#f59e0b' }}>
                                   {videoAnalysisResults.feed1.detection_timeline ? 
                                     (videoAnalysisResults.feed1.detection_timeline.reduce((sum, entry) => sum + entry.people_count, 0) / 
                                      videoAnalysisResults.feed1.detection_timeline.length).toFixed(1) : '0'} people
                                 </div>
-                                <div style={{ fontSize: '9px', color: '#fbbf24' }}>continuous monitoring</div>
+                                <div style={{ fontSize: '9px', color: '#fbbf24' }}>throughout video</div>
                               </div>
                               
-                              {/* Surge Events */}
+                              {/* Busy Periods */}
                               <div style={{ 
-                                background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05))', 
-                                border: '2px solid rgba(0, 255, 136, 0.4)',
-                                borderRadius: '8px', 
-                                padding: '10px',
-                                boxShadow: '0 0 15px rgba(0, 255, 136, 0.2)'
+                                background: 'rgba(16, 185, 129, 0.1)', 
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
                               }}>
-                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#00ff88' }}>📊 Surge Events</div>
-                                <div style={{ fontSize: '20px', fontWeight: '700', color: '#00ff88' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#10b981' }}>Busy Periods</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>
                                   {videoAnalysisResults.feed1.detection_timeline ? 
                                     videoAnalysisResults.feed1.detection_timeline.filter(entry => 
                                       entry.people_count > (videoAnalysisResults.feed1.peak_occupancy * 0.7)
                                     ).length : 0}
                                 </div>
-                                <div style={{ fontSize: '9px', color: '#6ee7b7' }}>high-density moments</div>
+                                <div style={{ fontSize: '9px', color: '#6ee7b7' }}>high activity moments</div>
                               </div>
                               
                             </div>
@@ -2615,33 +2342,29 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       )}
                     </div>
                     
-                    {/* Enhanced Summary Stats */}
+                    {/* Simple Summary Stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div style={{
-                        background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 136, 0.05))',
-                        borderRadius: '10px',
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
                         padding: '16px',
-                        textAlign: 'center',
-                        border: '2px solid rgba(0, 255, 136, 0.3)',
-                        boxShadow: '0 0 20px rgba(0, 255, 136, 0.15)'
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '22px', fontWeight: '700', color: '#00ff88' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#60a5fa' }}>
                           {videoAnalysisResults.feed1.peak_occupancy}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Neural Peak</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
                       </div>
                       <div style={{
-                        background: 'linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(0, 255, 255, 0.05))',
-                        borderRadius: '10px',
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
                         padding: '16px',
-                        textAlign: 'center',
-                        border: '2px solid rgba(0, 255, 255, 0.3)',
-                        boxShadow: '0 0 20px rgba(0, 255, 255, 0.15)'
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '22px', fontWeight: '700', color: '#00ffff' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
                           {Math.floor(videoAnalysisResults.feed1.video_duration / 60)}:{(videoAnalysisResults.feed1.video_duration % 60).toFixed(0).padStart(2, '0')}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Analysis Duration</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Duration</div>
                       </div>
                     </div>
                   </div>
@@ -2651,15 +2374,15 @@ export default function EnhancedVideoAnalyticsDashboard() {
                 {videoAnalysisResults.feed2 && (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#00ffff' }}>Neural Feed Beta Analytics</h4>
+                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#10b981' }}>Feed 2 Timeline</h4>
                       <button
                         onClick={() => downloadVideoResults('feed2')}
                         style={{
                           padding: '8px 16px',
                           borderRadius: '8px',
                           border: 'none',
-                          background: 'linear-gradient(45deg, #00ffff, #0080ff)',
-                          color: '#000',
+                          background: '#10b981',
+                          color: 'white',
                           fontSize: '12px',
                           fontWeight: '600',
                           cursor: 'pointer',
@@ -2669,35 +2392,34 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         }}
                       >
                         <Download style={{ width: '14px', height: '14px' }} />
-                        Export Neural Data
+                        Download Data
                       </button>
                     </div>
                     
-                    {/* Advanced Crowd Flow Analysis */}
+                    {/* Advanced Timeline Analysis */}
                     <div style={{
-                      background: 'rgba(0, 0, 0, 0.6)',
+                      background: 'rgba(30, 41, 59, 0.5)',
                       borderRadius: '12px',
                       padding: '20px',
-                      marginBottom: '20px',
-                      border: '2px solid rgba(0, 255, 255, 0.2)'
+                      marginBottom: '20px'
                     }}>
-                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#00ffff', margin: '0 0 20px 0' }}>
-                        Neural Flow Dynamics
+                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 20px 0' }}>
+                        Activity Analysis
                       </h5>
                       
                       {videoAnalysisResults.feed2.detection_timeline && (
                         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
                           
-                          {/* Advanced Area Chart Visualization */}
+                          {/* Line Chart Visualization */}
                           <div>
-                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Crowd Density Over Time</h6>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>People Count Timeline</h6>
                             <div style={{ 
                               position: 'relative',
-                              height: '150px', 
-                              background: 'rgba(0, 0, 0, 0.8)',
+                              height: '120px', 
+                              background: 'rgba(15, 23, 42, 0.5)',
                               borderRadius: '8px',
                               padding: '16px',
-                              border: '1px solid rgba(0, 255, 255, 0.3)'
+                              border: '1px solid rgba(16, 185, 129, 0.2)'
                             }}>
                               <svg width="100%" height="100%" style={{ overflow: 'visible' }}>
                                 {/* Grid lines */}
@@ -2708,40 +2430,18 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                     y1={`${y}%`} 
                                     x2="100%" 
                                     y2={`${y}%`} 
-                                    stroke="rgba(0, 255, 255, 0.1)" 
+                                    stroke="rgba(148, 163, 184, 0.1)" 
                                     strokeWidth="1"
                                   />
                                 ))}
                                 
-                                {/* Area fill */}
-                                <defs>
-                                  <linearGradient id="areaGradient2" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stopColor="rgba(0, 255, 255, 0.3)" />
-                                    <stop offset="100%" stopColor="rgba(0, 255, 255, 0.05)" />
-                                  </linearGradient>
-                                </defs>
-                                
-                                <polygon
-                                  fill="url(#areaGradient2)"
-                                  points={
-                                    createAdvancedTimelineChartData(videoAnalysisResults.feed2)
-                                      .map((entry, index, arr) => {
-                                        const x = (index / (arr.length - 1)) * 100;
-                                        const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
-                                        return `${x},${y}`;
-                                      })
-                                      .concat(['100,100', '0,100'])
-                                      .join(' ')
-                                  }
-                                />
-                                
-                                {/* Main line */}
+                                {/* Data line */}
                                 <polyline
                                   fill="none"
-                                  stroke="#00ffff"
-                                  strokeWidth="3"
+                                  stroke="#10b981"
+                                  strokeWidth="2"
                                   points={
-                                    createAdvancedTimelineChartData(videoAnalysisResults.feed2)
+                                    createTimelineChartData(videoAnalysisResults.feed2)
                                       .map((entry, index, arr) => {
                                         const x = (index / (arr.length - 1)) * 100;
                                         const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
@@ -2751,36 +2451,26 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   }
                                 />
                                 
-                                {/* Enhanced data points */}
-                                {createAdvancedTimelineChartData(videoAnalysisResults.feed2).map((entry, index, arr) => {
+                                {/* Data points */}
+                                {createTimelineChartData(videoAnalysisResults.feed2).map((entry, index, arr) => {
                                   const x = (index / (arr.length - 1)) * 100;
                                   const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
                                   return (
-                                    <g key={index}>
-                                      <circle
-                                        cx={`${x}%`}
-                                        cy={`${y}%`}
-                                        r="4"
-                                        fill={entry.color}
-                                        stroke="white"
-                                        strokeWidth="2"
-                                      />
-                                      <circle
-                                        cx={`${x}%`}
-                                        cy={`${y}%`}
-                                        r="8"
-                                        fill="none"
-                                        stroke={entry.color}
-                                        strokeWidth="1"
-                                        opacity="0.5"
-                                      />
-                                    </g>
+                                    <circle
+                                      key={index}
+                                      cx={`${x}%`}
+                                      cy={`${y}%`}
+                                      r="3"
+                                      fill={entry.color}
+                                      stroke="white"
+                                      strokeWidth="1"
+                                    />
                                   );
                                 })}
                               </svg>
                               
-                              {/* Enhanced Y-axis labels */}
-                              <div style={{ position: 'absolute', left: '-15px', top: '0', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: '#00ffff', fontWeight: '600' }}>
+                              {/* Y-axis labels */}
+                              <div style={{ position: 'absolute', left: '-10px', top: '0', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: '#64748b' }}>
                                 <span>{videoAnalysisResults.feed2.peak_occupancy}</span>
                                 <span>{Math.floor(videoAnalysisResults.feed2.peak_occupancy * 0.75)}</span>
                                 <span>{Math.floor(videoAnalysisResults.feed2.peak_occupancy * 0.5)}</span>
@@ -2790,21 +2480,20 @@ export default function EnhancedVideoAnalyticsDashboard() {
                             </div>
                           </div>
                           
-                          {/* Enhanced Activity Patterns */}
+                          {/* Activity Patterns */}
                           <div>
-                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Crowd Behavior Patterns</h6>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Activity Patterns</h6>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               
-                              {/* Critical Activity */}
+                              {/* Peak Activity */}
                               <div style={{ 
-                                background: 'linear-gradient(135deg, rgba(255, 68, 68, 0.15), rgba(255, 68, 68, 0.05))', 
-                                border: '2px solid rgba(255, 68, 68, 0.4)',
-                                borderRadius: '8px', 
-                                padding: '10px',
-                                boxShadow: '0 0 15px rgba(255, 68, 68, 0.2)'
+                                background: 'rgba(239, 68, 68, 0.1)', 
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
                               }}>
-                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ff4444' }}>🚨 Critical Density</div>
-                                <div style={{ fontSize: '20px', fontWeight: '700', color: '#ff4444' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ef4444' }}>Peak Activity</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444' }}>
                                   {videoAnalysisResults.feed2.peak_occupancy} people
                                 </div>
                                 <div style={{ fontSize: '9px', color: '#fca5a5' }}>
@@ -2818,39 +2507,37 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                 </div>
                               </div>
                               
-                              {/* Flow Rate */}
+                              {/* Average Activity */}
                               <div style={{ 
-                                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 215, 0, 0.05))', 
-                                border: '2px solid rgba(255, 215, 0, 0.4)',
-                                borderRadius: '8px', 
-                                padding: '10px',
-                                boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'
+                                background: 'rgba(245, 158, 11, 0.1)', 
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
                               }}>
-                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ffd700' }}>⚡ Average Flow</div>
-                                <div style={{ fontSize: '20px', fontWeight: '700', color: '#ffd700' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#f59e0b' }}>Average</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#f59e0b' }}>
                                   {videoAnalysisResults.feed2.detection_timeline ? 
                                     (videoAnalysisResults.feed2.detection_timeline.reduce((sum, entry) => sum + entry.people_count, 0) / 
                                      videoAnalysisResults.feed2.detection_timeline.length).toFixed(1) : '0'} people
                                 </div>
-                                <div style={{ fontSize: '9px', color: '#fbbf24' }}>continuous monitoring</div>
+                                <div style={{ fontSize: '9px', color: '#fbbf24' }}>throughout video</div>
                               </div>
                               
-                              {/* Surge Events */}
+                              {/* Busy Periods */}
                               <div style={{ 
-                                background: 'linear-gradient(135deg, rgba(0, 255, 255, 0.15), rgba(0, 255, 255, 0.05))', 
-                                border: '2px solid rgba(0, 255, 255, 0.4)',
-                                borderRadius: '8px', 
-                                padding: '10px',
-                                boxShadow: '0 0 15px rgba(0, 255, 255, 0.2)'
+                                background: 'rgba(16, 185, 129, 0.1)', 
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
                               }}>
-                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#00ffff' }}>📊 Surge Events</div>
-                                <div style={{ fontSize: '20px', fontWeight: '700', color: '#00ffff' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#10b981' }}>Busy Periods</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>
                                   {videoAnalysisResults.feed2.detection_timeline ? 
                                     videoAnalysisResults.feed2.detection_timeline.filter(entry => 
                                       entry.people_count > (videoAnalysisResults.feed2.peak_occupancy * 0.7)
                                     ).length : 0}
                                 </div>
-                                <div style={{ fontSize: '9px', color: '#6ee7b7' }}>high-density moments</div>
+                                <div style={{ fontSize: '9px', color: '#6ee7b7' }}>high activity moments</div>
                               </div>
                               
                             </div>
@@ -2860,33 +2547,29 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       )}
                     </div>
                     
-                    {/* Enhanced Summary Stats */}
+                    {/* Simple Summary Stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div style={{
-                        background: 'linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(0, 255, 255, 0.05))',
-                        borderRadius: '10px',
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
                         padding: '16px',
-                        textAlign: 'center',
-                        border: '2px solid rgba(0, 255, 255, 0.3)',
-                        boxShadow: '0 0 20px rgba(0, 255, 255, 0.15)'
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '22px', fontWeight: '700', color: '#00ffff' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
                           {videoAnalysisResults.feed2.peak_occupancy}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Neural Peak</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
                       </div>
                       <div style={{
-                        background: 'linear-gradient(135deg, rgba(255, 0, 128, 0.2), rgba(255, 0, 128, 0.05))',
-                        borderRadius: '10px',
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
                         padding: '16px',
-                        textAlign: 'center',
-                        border: '2px solid rgba(255, 0, 128, 0.3)',
-                        boxShadow: '0 0 20px rgba(255, 0, 128, 0.15)'
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '22px', fontWeight: '700', color: '#ff0080' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#f59e0b' }}>
                           {Math.floor(videoAnalysisResults.feed2.video_duration / 60)}:{(videoAnalysisResults.feed2.video_duration % 60).toFixed(0).padStart(2, '0')}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Analysis Duration</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Duration</div>
                       </div>
                     </div>
                   </div>
@@ -2913,94 +2596,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
           100% {
             transform: rotate(360deg);
           }
-        }
-        
-        /* Custom scrollbar for cyberpunk theme */
-        ::-webkit-scrollbar {
-          width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-          background: rgba(0, 0, 0, 0.3);
-          border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: linear-gradient(45deg, #00ff88, #00ffff);
-          border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(45deg, #00ffff, #ff0080);
-        }
-        
-        /* Enhanced input styling */
-        input[type="range"] {
-          -webkit-appearance: none;
-          appearance: none;
-          background: transparent;
-          cursor: pointer;
-        }
-        
-        input[type="range"]::-webkit-slider-track {
-          background: rgba(0, 0, 0, 0.5);
-          height: 6px;
-          border-radius: 3px;
-          border: 1px solid rgba(0, 255, 136, 0.3);
-        }
-        
-        input[type="range"]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          height: 16px;
-          width: 16px;
-          border-radius: 50%;
-          background: linear-gradient(45deg, #00ff88, #00ffff);
-          cursor: pointer;
-          border: 2px solid #000;
-          box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-        }
-        
-        input[type="range"]::-moz-range-track {
-          background: rgba(0, 0, 0, 0.5);
-          height: 6px;
-          border-radius: 3px;
-          border: 1px solid rgba(0, 255, 136, 0.3);
-        }
-        
-        input[type="range"]::-moz-range-thumb {
-          height: 16px;
-          width: 16px;
-          border-radius: 50%;
-          background: linear-gradient(45deg, #00ff88, #00ffff);
-          cursor: pointer;
-          border: 2px solid #000;
-          box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-        }
-        
-        /* Enhanced checkbox styling */
-        input[type="checkbox"] {
-          appearance: none;
-          width: 16px;
-          height: 16px;
-          border: 2px solid #00ff88;
-          border-radius: 3px;
-          background: rgba(0, 0, 0, 0.5);
-          cursor: pointer;
-          position: relative;
-        }
-        
-        input[type="checkbox"]:checked {
-          background: linear-gradient(45deg, #00ff88, #00ffff);
-          box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-        }
-        
-        input[type="checkbox"]:checked::after {
-          content: '✓';
-          position: absolute;
-          color: #000;
-          font-size: 12px;
-          font-weight: bold;
-          left: 50%;
-          top: 50%;
-          transform: translate(-50%, -50%);
         }
       `}</style>
     </div>
