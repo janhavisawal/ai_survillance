@@ -177,15 +177,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
   
   const [alerts, setAlerts] = useState<any[]>([]);
   
-  // Heatmap data for activity tracking
-  const [heatmapData, setHeatmapData] = useState<{
-    feed1: { [key: string]: number };
-    feed2: { [key: string]: number };
-  }>({
-    feed1: {},
-    feed2: {}
-  });
-  
   const [config, setConfig] = useState({
     confidence: 0.08,
     maxPeople: 15,
@@ -203,12 +194,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
   const canvasRef1 = useRef<HTMLCanvasElement | null>(null);
   const canvasRef2 = useRef<HTMLCanvasElement | null>(null);
   
-  // Refs for heatmap videos (duplicates)
-  const heatmapVideoRef1 = useRef<HTMLVideoElement | null>(null);
-  const heatmapVideoRef2 = useRef<HTMLVideoElement | null>(null);
-  const heatmapCanvasRef1 = useRef<HTMLCanvasElement | null>(null);
-  const heatmapCanvasRef2 = useRef<HTMLCanvasElement | null>(null);
-  
   const detectionIntervalRef1 = useRef<NodeJS.Timeout | null>(null);
   const detectionIntervalRef2 = useRef<NodeJS.Timeout | null>(null);
   const streamRef1 = useRef<MediaStream | null>(null);
@@ -221,123 +206,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
   const uploadVideoRef2 = useRef<HTMLVideoElement>(null);
   const progressIntervalRef1 = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef2 = useRef<NodeJS.Timeout | null>(null);
-
-  // Heatmap functions
-  const updateHeatmapData = useCallback((detections: any[], feedId: 'feed1' | 'feed2') => {
-    if (!detections.length) return;
-    
-    setHeatmapData(prev => {
-      const newData = { ...prev };
-      const feedData = { ...newData[feedId] };
-      const gridSize = 32; // Grid cell size for heatmap
-      
-      detections.forEach(detection => {
-        const [x1, y1, x2, y2] = detection.bbox;
-        const centerX = Math.floor((x1 + x2) / 2 / gridSize) * gridSize;
-        const centerY = Math.floor((y1 + y2) / 2 / gridSize) * gridSize;
-        const key = `${centerX}_${centerY}`;
-        
-        feedData[key] = (feedData[key] || 0) + 1;
-      });
-      
-      newData[feedId] = feedData;
-      return newData;
-    });
-  }, []);
-
-  const drawHeatmap = useCallback((feedId: 'feed1' | 'feed2') => {
-    const heatmapVideoRef = feedId === 'feed1' ? heatmapVideoRef1 : heatmapVideoRef2;
-    const heatmapCanvasRef = feedId === 'feed1' ? heatmapCanvasRef1 : heatmapCanvasRef2;
-    const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
-    const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
-    
-    const canvas = heatmapCanvasRef.current;
-    const video = heatmapVideoRef.current;
-    
-    if (!canvas || !video) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    // Set canvas size to match video
-    const rect = video.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    const feedData = heatmapData[feedId];
-    if (!feedData || Object.keys(feedData).length === 0) return;
-    
-    const gridSize = 32;
-    const maxDensity = Math.max(...Object.values(feedData)) || 1;
-    
-    // Scale factors
-    const scaleX = canvas.width / (video.videoWidth || 640);
-    const scaleY = canvas.height / (video.videoHeight || 480);
-    
-    // Draw heatmap cells
-    Object.entries(feedData).forEach(([key, density]) => {
-      const [x, y] = key.split('_').map(Number);
-      const scaledX = x * scaleX;
-      const scaledY = y * scaleY;
-      const scaledSize = gridSize * Math.min(scaleX, scaleY);
-      
-      const intensity = density / maxDensity;
-      
-      // Color based on intensity (blue to red heatmap)
-      let color;
-      if (intensity < 0.3) {
-        color = `rgba(59, 130, 246, ${intensity * 0.6})`; // Blue for low activity
-      } else if (intensity < 0.7) {
-        color = `rgba(245, 158, 11, ${intensity * 0.7})`; // Orange for medium
-      } else {
-        color = `rgba(239, 68, 68, ${intensity * 0.8})`; // Red for high activity
-      }
-      
-      // Smooth circles instead of squares for better visualization
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(scaledX + scaledSize/2, scaledY + scaledSize/2, scaledSize/2, 0, 2 * Math.PI);
-      ctx.fill();
-    });
-    
-    // Overlay legend
-    const legendX = canvas.width - 120;
-    const legendY = 20;
-    
-    // Legend background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(legendX - 10, legendY - 10, 110, 90);
-    
-    // Legend title
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 12px system-ui';
-    ctx.fillText('Activity Density', legendX, legendY + 10);
-    
-    // Legend items
-    const legendItems = [
-      { color: 'rgba(59, 130, 246, 0.6)', label: 'Low' },
-      { color: 'rgba(245, 158, 11, 0.7)', label: 'Medium' },
-      { color: 'rgba(239, 68, 68, 0.8)', label: 'High' }
-    ];
-    
-    legendItems.forEach((item, index) => {
-      ctx.fillStyle = item.color;
-      ctx.fillRect(legendX, legendY + 20 + (index * 18), 15, 12);
-      ctx.fillStyle = 'white';
-      ctx.font = '11px system-ui';
-      ctx.fillText(item.label, legendX + 20, legendY + 30 + (index * 18));
-    });
-    
-    // Heatmap mode indicator
-    ctx.fillStyle = 'rgba(255, 107, 53, 0.9)';
-    ctx.fillRect(10, canvas.height - 35, 100, 25);
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 11px system-ui';
-    ctx.fillText('🔥 HEATMAP', 15, canvas.height - 18);
-  }, [heatmapData]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -567,14 +435,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
           }
         }));
         
-        // Update heatmap data
-        updateHeatmapData(result.detections || [], feedId as 'feed1' | 'feed2');
-        
         // Draw bounding boxes
         drawRealBoundingBoxes(feedId, result.detections || []);
-        
-        // Update heatmap visualization
-        setTimeout(() => drawHeatmap(feedId as 'feed1' | 'feed2'), 100);
         
         // Update analytics
         updateRealTimeAnalytics(result, feedId);
@@ -593,9 +455,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
     } catch (error) {
       console.error(`Real-time detection error for ${feedId}:`, error);
     }
-  }, [isConnected, config, apiUrl, updateHeatmapData, drawHeatmap]);
+  }, [isConnected, config, apiUrl]);
 
-  // Enhanced video analysis drawing with sharp, professional bounding boxes
+  // Clean, simple video analysis drawing
   const drawVideoAnalysisResults = useCallback((timelineData: any[] = [], feedId: 'feed1' | 'feed2') => {
     const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
@@ -633,7 +495,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    // Draw each detection with sharp, professional style
+    // Draw each detection with clean, simple style
     closestEntry.detections.forEach((detection: any, index: number) => {
       const { bbox, confidence } = detection;
       if (!bbox || bbox.length !== 4) return;
@@ -644,125 +506,43 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
-      // Sharp, professional bounding box style
       const boxWidth = scaledX2 - scaledX1;
       const boxHeight = scaledY2 - scaledY1;
       
-      // Main box - sharp edges with gradient
-      const gradient = ctx.createLinearGradient(scaledX1, scaledY1, scaledX2, scaledY2);
-      gradient.addColorStop(0, 'rgba(59, 130, 246, 0.15)');
-      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.25)');
-      
-      ctx.fillStyle = gradient;
+      // Simple transparent fill
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
       ctx.fillRect(scaledX1, scaledY1, boxWidth, boxHeight);
       
-      // Sharp border with shadow effect
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+      // Clean border
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
       ctx.lineWidth = 2;
-      ctx.shadowColor = 'rgba(59, 130, 246, 0.3)';
-      ctx.shadowBlur = 4;
       ctx.strokeRect(scaledX1, scaledY1, boxWidth, boxHeight);
-      ctx.shadowBlur = 0;
       
-      // Corner indicators (professional touch)
-      const cornerSize = 12;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.lineWidth = 3;
+      // Simple label
+      const labelText = `${(confidence * 100).toFixed(0)}%`;
+      ctx.font = '12px system-ui';
+      const labelMetrics = ctx.measureText(labelText);
       
-      // Top-left corner
-      ctx.beginPath();
-      ctx.moveTo(scaledX1, scaledY1 + cornerSize);
-      ctx.lineTo(scaledX1, scaledY1);
-      ctx.lineTo(scaledX1 + cornerSize, scaledY1);
-      ctx.stroke();
-      
-      // Top-right corner
-      ctx.beginPath();
-      ctx.moveTo(scaledX2 - cornerSize, scaledY1);
-      ctx.lineTo(scaledX2, scaledY1);
-      ctx.lineTo(scaledX2, scaledY1 + cornerSize);
-      ctx.stroke();
-      
-      // Bottom-right corner
-      ctx.beginPath();
-      ctx.moveTo(scaledX2, scaledY2 - cornerSize);
-      ctx.lineTo(scaledX2, scaledY2);
-      ctx.lineTo(scaledX2 - cornerSize, scaledY2);
-      ctx.stroke();
-      
-      // Bottom-left corner
-      ctx.beginPath();
-      ctx.moveTo(scaledX1 + cornerSize, scaledY2);
-      ctx.lineTo(scaledX1, scaledY2);
-      ctx.lineTo(scaledX1, scaledY2 - cornerSize);
-      ctx.stroke();
-      
-      // Professional ID badge
-      const personId = `P${index + 1}`;
-      const confidenceText = `${(confidence * 100).toFixed(0)}%`;
-      
-      ctx.font = 'bold 11px system-ui';
-      const idMetrics = ctx.measureText(personId);
-      const confMetrics = ctx.measureText(confidenceText);
-      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 12;
-      
-      // Badge background with gradient
-      const badgeGradient = ctx.createLinearGradient(scaledX1, scaledY1 - 35, scaledX1, scaledY1);
-      badgeGradient.addColorStop(0, 'rgba(59, 130, 246, 0.95)');
-      badgeGradient.addColorStop(1, 'rgba(37, 99, 235, 0.95)');
-      
-      ctx.fillStyle = badgeGradient;
-      ctx.fillRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
-      
-      // Badge border
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
-      
-      // Badge text
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 10px system-ui';
-      ctx.fillText(personId, scaledX1 + 6, scaledY1 - 22);
-      ctx.font = '9px system-ui';
-      ctx.fillText(confidenceText, scaledX1 + 6, scaledY1 - 8);
-      
-      // Center crosshair
-      const centerX = (scaledX1 + scaledX2) / 2;
-      const centerY = (scaledY1 + scaledY2) / 2;
-      
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(centerX - 8, centerY);
-      ctx.lineTo(centerX + 8, centerY);
-      ctx.moveTo(centerX, centerY - 8);
-      ctx.lineTo(centerX, centerY + 8);
-      ctx.stroke();
-      
+      // Label background
       ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
-      ctx.fill();
+      ctx.fillRect(scaledX1, scaledY1 - 20, labelMetrics.width + 8, 18);
+      
+      // Label text
+      ctx.fillStyle = 'white';
+      ctx.fillText(labelText, scaledX1 + 4, scaledY1 - 6);
     });
     
-    // Professional header
-    const headerText = `${closestEntry.detections.length} People Detected`;
-    ctx.font = 'bold 14px system-ui';
-    const headerMetrics = ctx.measureText(headerText);
-    
-    const headerGradient = ctx.createLinearGradient(10, 10, 10, 35);
-    headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-    headerGradient.addColorStop(1, 'rgba(30, 41, 59, 0.85)');
-    
-    ctx.fillStyle = headerGradient;
-    ctx.fillRect(10, 10, headerMetrics.width + 20, 28);
-    
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(10, 10, headerMetrics.width + 20, 28);
-    
-    ctx.fillStyle = 'white';
-    ctx.fillText(headerText, 20, 30);
+    // Simple count display
+    if (closestEntry.detections.length > 0) {
+      const countText = `${closestEntry.detections.length} People`;
+      ctx.font = 'bold 16px system-ui';
+      
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(10, 10, 120, 30);
+      
+      ctx.fillStyle = 'white';
+      ctx.fillText(countText, 15, 30);
+    }
   }, []);
 
   const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
@@ -803,113 +583,39 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const boxWidth = scaledX2 - scaledX1;
       const boxHeight = scaledY2 - scaledY1;
       
-      // Sharp, professional style with green theme for live
-      const gradient = ctx.createLinearGradient(scaledX1, scaledY1, scaledX2, scaledY2);
-      gradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
-      gradient.addColorStop(1, 'rgba(16, 185, 129, 0.25)');
-      
-      ctx.fillStyle = gradient;
+      // Simple transparent fill
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.1)';
       ctx.fillRect(scaledX1, scaledY1, boxWidth, boxHeight);
       
-      // Sharp border with glow effect
-      ctx.strokeStyle = 'rgba(16, 185, 129, 0.9)';
+      // Clean border
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)';
       ctx.lineWidth = 2;
-      ctx.shadowColor = 'rgba(16, 185, 129, 0.4)';
-      ctx.shadowBlur = 6;
       ctx.strokeRect(scaledX1, scaledY1, boxWidth, boxHeight);
-      ctx.shadowBlur = 0;
       
-      // Corner indicators
-      const cornerSize = 12;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.lineWidth = 3;
+      // Simple confidence label
+      const labelText = `${(confidence * 100).toFixed(0)}%`;
+      ctx.font = '12px system-ui';
+      const labelMetrics = ctx.measureText(labelText);
       
-      // Draw all four corners
-      ctx.beginPath();
-      // Top-left
-      ctx.moveTo(scaledX1, scaledY1 + cornerSize);
-      ctx.lineTo(scaledX1, scaledY1);
-      ctx.lineTo(scaledX1 + cornerSize, scaledY1);
-      // Top-right
-      ctx.moveTo(scaledX2 - cornerSize, scaledY1);
-      ctx.lineTo(scaledX2, scaledY1);
-      ctx.lineTo(scaledX2, scaledY1 + cornerSize);
-      // Bottom-right
-      ctx.moveTo(scaledX2, scaledY2 - cornerSize);
-      ctx.lineTo(scaledX2, scaledY2);
-      ctx.lineTo(scaledX2 - cornerSize, scaledY2);
-      // Bottom-left
-      ctx.moveTo(scaledX1 + cornerSize, scaledY2);
-      ctx.lineTo(scaledX1, scaledY2);
-      ctx.lineTo(scaledX1, scaledY2 - cornerSize);
-      ctx.stroke();
-      
-      // Professional badge for live detection
-      const personId = `P${index + 1}`;
-      const confidenceText = `${(confidence * 100).toFixed(0)}%`;
-      
-      ctx.font = 'bold 11px system-ui';
-      const idMetrics = ctx.measureText(personId);
-      const confMetrics = ctx.measureText(confidenceText);
-      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 12;
-      
-      // Badge with green gradient
-      const badgeGradient = ctx.createLinearGradient(scaledX1, scaledY1 - 35, scaledX1, scaledY1);
-      badgeGradient.addColorStop(0, 'rgba(16, 185, 129, 0.95)');
-      badgeGradient.addColorStop(1, 'rgba(5, 150, 105, 0.95)');
-      
-      ctx.fillStyle = badgeGradient;
-      ctx.fillRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
-      
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
-      
-      // Badge text
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 10px system-ui';
-      ctx.fillText(personId, scaledX1 + 6, scaledY1 - 22);
-      ctx.font = '9px system-ui';
-      ctx.fillText(confidenceText, scaledX1 + 6, scaledY1 - 8);
-      
-      // Center crosshair
-      const centerX = (scaledX1 + scaledX2) / 2;
-      const centerY = (scaledY1 + scaledY2) / 2;
-      
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(centerX - 8, centerY);
-      ctx.lineTo(centerX + 8, centerY);
-      ctx.moveTo(centerX, centerY - 8);
-      ctx.lineTo(centerX, centerY + 8);
-      ctx.stroke();
-      
+      // Label background
       ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
-      ctx.fill();
+      ctx.fillRect(scaledX1, scaledY1 - 20, labelMetrics.width + 8, 18);
+      
+      // Label text
+      ctx.fillStyle = 'white';
+      ctx.fillText(labelText, scaledX1 + 4, scaledY1 - 6);
     });
     
-    // Professional live header
+    // Simple live count display
     if (detections.length > 0) {
-      const headerText = `${detections.length} People Detected`;
-      ctx.font = 'bold 14px system-ui';
-      const headerMetrics = ctx.measureText(headerText);
+      const countText = `${detections.length} People`;
+      ctx.font = 'bold 16px system-ui';
       
-      const headerGradient = ctx.createLinearGradient(10, 10, 10, 35);
-      headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-      headerGradient.addColorStop(1, 'rgba(30, 41, 59, 0.85)');
-      
-      ctx.fillStyle = headerGradient;
-      ctx.fillRect(10, 10, headerMetrics.width + 50, 28);
-      
-      ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(10, 10, headerMetrics.width + 50, 28);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(10, 10, 120, 30);
       
       ctx.fillStyle = 'white';
-      ctx.fillText(headerText, 20, 30);
+      ctx.fillText(countText, 15, 30);
       
       // Live indicator
       ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
@@ -1013,17 +719,14 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
-      const heatmapVideoRef = feedId === 'feed1' ? heatmapVideoRef1 : heatmapVideoRef2;
       const streamRef = feedId === 'feed1' ? streamRef1 : streamRef2;
       
-      if (!videoRef.current || !heatmapVideoRef.current) return;
+      if (!videoRef.current) return;
 
       const videoElement = videoRef.current;
-      const heatmapVideoElement = heatmapVideoRef.current;
       
-      // Set up both main and heatmap videos with the same stream
+      // Set up main video with the stream
       videoElement.srcObject = stream;
-      heatmapVideoElement.srcObject = stream;
       streamRef.current = stream;
       
       setFeeds(prev => ({
@@ -1034,16 +737,13 @@ export default function EnhancedVideoAnalyticsDashboard() {
       videoElement.onloadeddata = () => {
         videoElement.play()
           .then(() => {
-            // Sync heatmap video
-            heatmapVideoElement.play();
             if (config.realTimeMode) {
               setTimeout(() => startRealTimeDetection(feedId), 1000);
             }
           })
           .catch(e => {
             videoElement.muted = true;
-            heatmapVideoElement.muted = true;
-            videoElement.play().then(() => heatmapVideoElement.play());
+            videoElement.play();
           });
       };
       
@@ -1188,7 +888,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
         if (url) URL.revokeObjectURL(url);
       });
       
-      // Clean up heatmap video streams
+      // Clean up camera streams
       if (streamRef1.current) {
         streamRef1.current.getTracks().forEach(track => track.stop());
       }
@@ -1449,62 +1149,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
               )}
             </div>
             
-            {/* Heatmap View Below Main Video */}
-            {(feeds.feed1.isStreaming || videoPreview.feed1) && (
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={{ width: '12px', height: '12px', background: 'linear-gradient(45deg, #ff6b35, #f59e0b)', borderRadius: '2px' }}></div>
-                  <h5 style={{ fontSize: '12px', fontWeight: '600', margin: 0, color: '#ff6b35' }}>Activity Heatmap</h5>
-                </div>
-                <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-                  {videoPreview.feed1 ? (
-                    <video
-                      ref={uploadVideoRef1}
-                      src={videoPreview.feed1}
-                      muted
-                      style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.3 }}
-                    />
-                  ) : (
-                    <video
-                      ref={heatmapVideoRef1}
-                      autoPlay
-                      muted
-                      playsInline
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.3 }}
-                    />
-                  )}
-                  
-                  <canvas
-                    ref={heatmapCanvasRef1}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      pointerEvents: 'none'
-                    }}
-                  />
-                  
-                  {!feeds.feed1.isStreaming && !videoPreview.feed1 && (
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'linear-gradient(135deg, #0f172a, #1e293b)'
-                    }}>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔥</div>
-                        <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>Heatmap will appear during detection</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            
             {/* Video Upload Section for Feed 1 */}
             <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
@@ -1759,62 +1403,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
               )}
             </div>
             
-            {/* Heatmap View Below Main Video */}
-            {(feeds.feed2.isStreaming || videoPreview.feed2) && (
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={{ width: '12px', height: '12px', background: 'linear-gradient(45deg, #ff6b35, #f59e0b)', borderRadius: '2px' }}></div>
-                  <h5 style={{ fontSize: '12px', fontWeight: '600', margin: 0, color: '#ff6b35' }}>Activity Heatmap</h5>
-                </div>
-                <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-                  {videoPreview.feed2 ? (
-                    <video
-                      ref={uploadVideoRef2}
-                      src={videoPreview.feed2}
-                      muted
-                      style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.3 }}
-                    />
-                  ) : (
-                    <video
-                      ref={heatmapVideoRef2}
-                      autoPlay
-                      muted
-                      playsInline
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.3 }}
-                    />
-                  )}
-                  
-                  <canvas
-                    ref={heatmapCanvasRef2}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      pointerEvents: 'none'
-                    }}
-                  />
-                  
-                  {!feeds.feed2.isStreaming && !videoPreview.feed2 && (
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'linear-gradient(135deg, #0f172a, #1e293b)'
-                    }}>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔥</div>
-                        <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>Heatmap will appear during detection</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            
             {/* Video Upload Section for Feed 2 */}
             <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
@@ -2058,41 +1646,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     />
                     Enable Alerts
                   </label>
-                </div>
-                
-                {/* Heatmap controls */}
-                <div style={{ 
-                  padding: '12px', 
-                  background: 'rgba(30, 41, 59, 0.5)', 
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255, 107, 53, 0.3)'
-                }}>
-                  <h4 style={{ fontSize: '12px', fontWeight: '600', color: '#ff6b35', margin: '0 0 8px 0' }}>🔥 Heatmap Controls</h4>
-                  
-                  <button
-                    onClick={() => {
-                      setHeatmapData({ feed1: {}, feed2: {} });
-                      console.log('Heatmap data cleared for both feeds');
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      background: '#6b7280',
-                      color: 'white',
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      marginBottom: '8px'
-                    }}
-                  >
-                    Clear All Heatmap Data
-                  </button>
-                  
-                  <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                    Heatmaps show activity density over time. Red areas indicate high activity zones.
-                  </div>
                 </div>
               </div>
             </div>
