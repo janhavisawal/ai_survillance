@@ -1537,7 +1537,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                               border: '1px solid rgba(139, 92, 246, 0.2)'
                             }}>
                               <div style={{ fontSize: '20px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
-                                {videoAnalysisResult.total_detections.toLocaleString()}
+                                {videoAnalysisResult.total_detections?.toLocaleString() || '0'}
                               </div>
                               <div style={{ fontSize: '10px', color: '#94a3b8' }}>VIDEO TOTAL</div>
                             </div>
@@ -1724,7 +1724,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         <div>
                           <p style={{ color: '#6ee7b7', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Total Video Detections</p>
                           <p style={{ fontSize: '32px', fontWeight: '900', color: '#10b981', margin: 0 }}>
-                            {videoAnalysisResult.total_detections.toLocaleString()}
+                            {videoAnalysisResult?.total_detections?.toLocaleString() || '0'}
                           </p>
                         </div>
                         <Users style={{ width: '40px', height: '40px', color: '#10b981' }} />
@@ -1741,7 +1741,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         <div>
                           <p style={{ color: '#93c5fd', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Peak Occupancy</p>
                           <p style={{ fontSize: '32px', fontWeight: '900', color: '#3b82f6', margin: 0 }}>
-                            {videoAnalysisResult.peak_occupancy}
+                            {videoAnalysisResult?.peak_occupancy || '0'}
                           </p>
                         </div>
                         <BarChart3 style={{ width: '40px', height: '40px', color: '#3b82f6' }} />
@@ -1758,7 +1758,10 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         <div>
                           <p style={{ color: '#c4b5fd', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Processing Time</p>
                           <p style={{ fontSize: '32px', fontWeight: '900', color: '#8b5cf6', margin: 0 }}>
-                            {(videoAnalysisResult.processing_stats.total_processing_time / 1000).toFixed(1)}s
+                            {videoAnalysisResult?.processing_stats?.total_processing_time 
+                              ? (videoAnalysisResult.processing_stats.total_processing_time / 1000).toFixed(1) + 's'
+                              : '0s'
+                            }
                           </p>
                         </div>
                         <Clock style={{ width: '40px', height: '40px', color: '#8b5cf6' }} />
@@ -1808,23 +1811,28 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                             <span style={{ color: '#94a3b8' }}>Total Frames:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.frames_processed.toLocaleString()}</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.frames_processed?.toLocaleString() || '0'}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                             <span style={{ color: '#94a3b8' }}>Processed Frames:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.processing_stats.frames_analyzed.toLocaleString()}</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.processing_stats?.frames_analyzed?.toLocaleString() || '0'}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                             <span style={{ color: '#94a3b8' }}>Processing Time:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{(videoAnalysisResult.processing_stats.total_processing_time / 1000).toFixed(1)}s</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>
+                              {videoAnalysisResult?.processing_stats?.total_processing_time 
+                                ? (videoAnalysisResult.processing_stats.total_processing_time / 1000).toFixed(1) + 's'
+                                : '0s'
+                              }
+                            </span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                             <span style={{ color: '#94a3b8' }}>Video Duration:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.video_duration.toFixed(1)}s</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.video_duration?.toFixed(1) || '0'}s</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
                             <span style={{ color: '#94a3b8' }}>Sample Interval:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.processing_stats.sample_interval}</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.processing_stats?.sample_interval || '0'}</span>
                           </div>
                         </div>
                       </div>
@@ -1836,7 +1844,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                               <span style={{ color: '#10b981', fontWeight: '600' }}>High (≥70%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.confidence_distribution.high}</span>
+                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.confidence_distribution?.high || 0}</span>
                             </div>
                             <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
                               <div 
@@ -1844,7 +1852,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   background: '#10b981',
                                   height: '100%',
                                   borderRadius: '8px',
-                                  width: `${(videoAnalysisResult.confidence_distribution.high / videoAnalysisResult.total_detections) * 100}%`
+                                  width: `${videoAnalysisResult?.confidence_distribution?.high && videoAnalysisResult?.total_detections 
+                                    ? (videoAnalysisResult.confidence_distribution.high / videoAnalysisResult.total_detections) * 100 
+                                    : 0}%`
                                 }}
                               ></div>
                             </div>
@@ -1852,7 +1862,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                               <span style={{ color: '#f59e0b', fontWeight: '600' }}>Medium (40-70%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.confidence_distribution.medium}</span>
+                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.confidence_distribution?.medium || 0}</span>
                             </div>
                             <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
                               <div 
@@ -1860,7 +1870,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   background: '#f59e0b',
                                   height: '100%',
                                   borderRadius: '8px',
-                                  width: `${(videoAnalysisResult.confidence_distribution.medium / videoAnalysisResult.total_detections) * 100}%`
+                                  width: `${videoAnalysisResult?.confidence_distribution?.medium && videoAnalysisResult?.total_detections 
+                                    ? (videoAnalysisResult.confidence_distribution.medium / videoAnalysisResult.total_detections) * 100 
+                                    : 0}%`
                                 }}
                               ></div>
                             </div>
@@ -1868,7 +1880,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                               <span style={{ color: '#ef4444', fontWeight: '600' }}>Low (&lt;40%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.confidence_distribution.low}</span>
+                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.confidence_distribution?.low || 0}</span>
                             </div>
                             <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
                               <div 
@@ -1876,7 +1888,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   background: '#ef4444',
                                   height: '100%',
                                   borderRadius: '8px',
-                                  width: `${(videoAnalysisResult.confidence_distribution.low / videoAnalysisResult.total_detections) * 100}%`
+                                  width: `${videoAnalysisResult?.confidence_distribution?.low && videoAnalysisResult?.total_detections 
+                                    ? (videoAnalysisResult.confidence_distribution.low / videoAnalysisResult.total_detections) * 100 
+                                    : 0}%`
                                 }}
                               ></div>
                             </div>
@@ -1886,7 +1900,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     </div>
 
                     {/* Timeline Preview */}
-                    {videoAnalysisResult.detection_timeline && videoAnalysisResult.detection_timeline.length > 0 && (
+                    {videoAnalysisResult?.detection_timeline && videoAnalysisResult.detection_timeline.length > 0 && (
                       <div style={{ marginTop: '32px' }}>
                         <h5 style={{ fontSize: '18px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 24px 0' }}>Detection Timeline (First 10 entries)</h5>
                         <div style={{ overflowX: 'auto' }}>
