@@ -9,7 +9,7 @@ import {
   FileVideo, Zap, TrendingUp, Database
 } from 'lucide-react'
 
-export default function VideoAnalyticsDashboard() {
+export default function Page() {
   const [feeds, setFeeds] = useState({
     feed1: { 
       isStreaming: false, 
@@ -31,12 +31,12 @@ export default function VideoAnalyticsDashboard() {
       totalFrames: 0,
       processedFrames: 0
     }
-  })
+  });
   
-  const [isConnected, setIsConnected] = useState(false)
-  const [currentTime, setCurrentTime] = useState(new Date())
-  const [apiStatus, setApiStatus] = useState('disconnected') // 'connected', 'disconnected', 'connecting'
-  const [apiUrl, setApiUrl] = useState('') // User will input their Colab URL
+  const [isConnected, setIsConnected] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [apiStatus, setApiStatus] = useState('disconnected'); // 'connected', 'disconnected', 'connecting'
+  const [apiUrl, setApiUrl] = useState(''); // User will input their Colab URL
   
   // Real analytics from API
   const [analytics, setAnalytics] = useState({
@@ -50,9 +50,9 @@ export default function VideoAnalyticsDashboard() {
       totalFramesProcessed: 0,
       fps: 0
     }
-  })
+  });
   
-  const [alerts, setAlerts] = useState([])
+  const [alerts, setAlerts] = useState([]);
   
   const [config, setConfig] = useState({
     confidence: 0.08, // Ultra-sensitive as per your API
@@ -60,7 +60,7 @@ export default function VideoAnalyticsDashboard() {
     alertEnabled: true,
     nightVision: false,
     motionDetection: true
-  })
+  });
 
   const [systemStats, setSystemStats] = useState({
     cpuUsage: 45,
@@ -70,34 +70,34 @@ export default function VideoAnalyticsDashboard() {
     totalDetections: 2847,
     avgAccuracy: 96.8,
     uptime: '99.9%'
-  })
+  });
 
-  const fileInputRef1 = useRef(null)
-  const fileInputRef2 = useRef(null)
-  const videoRef1 = useRef(null)
-  const videoRef2 = useRef(null)
+  const fileInputRef1 = useRef<HTMLInputElement>(null);
+  const fileInputRef2 = useRef<HTMLInputElement>(null);
+  const videoRef1 = useRef<HTMLVideoElement>(null);
+  const videoRef2 = useRef<HTMLVideoElement>(null);
 
   // Update time every second
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Test API connection
   const testApiConnection = async () => {
     if (!apiUrl.trim()) {
-      alert('Please enter your Google Colab API URL')
-      return
+      alert('Please enter your Google Colab API URL');
+      return;
     }
 
-    setApiStatus('connecting')
+    setApiStatus('connecting');
     try {
-      const response = await fetch(`${apiUrl}/health`)
+      const response = await fetch(`${apiUrl}/health`);
       if (response.ok) {
-        const data = await response.json()
-        setApiStatus('connected')
-        setIsConnected(true)
-        console.log('API Connected:', data)
+        const data = await response.json();
+        setApiStatus('connected');
+        setIsConnected(true);
+        console.log('API Connected:', data);
         
         // Add success alert
         setAlerts(prev => [{
@@ -106,14 +106,14 @@ export default function VideoAnalyticsDashboard() {
           message: `Connected to Ultra-Sensitive API (${data.detector_type})`,
           time: new Date().toLocaleTimeString(),
           severity: 'low'
-        }, ...prev.slice(0, 4)])
+        }, ...prev.slice(0, 4)]);
       } else {
-        throw new Error('API not responding')
+        throw new Error('API not responding');
       }
     } catch (error) {
-      setApiStatus('disconnected')
-      setIsConnected(false)
-      console.error('API Connection failed:', error)
+      setApiStatus('disconnected');
+      setIsConnected(false);
+      console.error('API Connection failed:', error);
       
       setAlerts(prev => [{
         id: Date.now(),
@@ -121,15 +121,15 @@ export default function VideoAnalyticsDashboard() {
         message: 'Failed to connect to API. Check your Colab URL.',
         time: new Date().toLocaleTimeString(),
         severity: 'high'
-      }, ...prev.slice(0, 4)])
+      }, ...prev.slice(0, 4)]);
     }
-  }
+  };
 
   // Process uploaded video
-  const processVideo = async (file, feedId) => {
+  const processVideo = async (file: File, feedId: string) => {
     if (!isConnected) {
-      alert('Please connect to your API first!')
-      return
+      alert('Please connect to your API first!');
+      return;
     }
 
     setFeeds(prev => ({
@@ -141,39 +141,39 @@ export default function VideoAnalyticsDashboard() {
         processedFrames: 0,
         analysisComplete: false
       }
-    }))
+    }));
 
     // Load video to get duration/frames
-    const video = document.createElement('video')
-    video.src = URL.createObjectURL(file)
+    const video = document.createElement('video');
+    video.src = URL.createObjectURL(file);
     
     video.onloadedmetadata = async () => {
-      const duration = video.duration
-      const fps = 30 // Approximate
-      const totalFrames = Math.floor(duration * fps)
+      const duration = video.duration;
+      const fps = 30; // Approximate
+      const totalFrames = Math.floor(duration * fps);
       
       setFeeds(prev => ({
         ...prev,
         [feedId]: { ...prev[feedId], totalFrames }
-      }))
+      }));
 
       try {
         // Send video to API for processing
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('confidence', config.confidence.toString())
-        formData.append('feed_id', feedId)
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('confidence', config.confidence.toString());
+        formData.append('feed_id', feedId);
 
         const response = await fetch(`${apiUrl}/detect/video/analyze`, {
           method: 'POST',
           body: formData
-        })
+        });
 
         if (response.ok) {
-          const result = await response.json()
+          const result = await response.json();
           
           // Update analytics with real data
-          updateAnalyticsFromResult(result, feedId)
+          updateAnalyticsFromResult(result, feedId);
           
           setFeeds(prev => ({
             ...prev,
@@ -183,7 +183,7 @@ export default function VideoAnalyticsDashboard() {
               analysisComplete: true,
               currentCount: result.peak_occupancy || 0
             }
-          }))
+          }));
 
           // Add completion alert
           setAlerts(prev => [{
@@ -192,17 +192,17 @@ export default function VideoAnalyticsDashboard() {
             message: `Video analysis complete for ${feedId}. Found ${result.total_detections || 0} detections.`,
             time: new Date().toLocaleTimeString(),
             severity: 'low'
-          }, ...prev.slice(0, 4)])
+          }, ...prev.slice(0, 4)]);
 
         } else {
-          throw new Error('Video processing failed')
+          throw new Error('Video processing failed');
         }
       } catch (error) {
-        console.error('Video processing error:', error)
+        console.error('Video processing error:', error);
         setFeeds(prev => ({
           ...prev,
           [feedId]: { ...prev[feedId], isProcessing: false }
-        }))
+        }));
         
         setAlerts(prev => [{
           id: Date.now(),
@@ -210,36 +210,36 @@ export default function VideoAnalyticsDashboard() {
           message: `Video processing failed for ${feedId}`,
           time: new Date().toLocaleTimeString(),
           severity: 'high'
-        }, ...prev.slice(0, 4)])
+        }, ...prev.slice(0, 4)]);
       }
-    }
-  }
+    };
+  };
 
   // Update analytics from API result
-  const updateAnalyticsFromResult = (result, feedId) => {
+  const updateAnalyticsFromResult = (result: any, feedId: string) => {
     setAnalytics(prev => {
-      const newHistory = [...prev.detectionHistory]
+      const newHistory = [...prev.detectionHistory];
       
       // Add detection timeline data
       if (result.detection_timeline) {
-        result.detection_timeline.forEach(point => {
+        result.detection_timeline.forEach((point: any) => {
           newHistory.push({
             timestamp: point.timestamp,
             count: point.people_count,
             feedId: feedId,
             confidence: point.avg_confidence
-          })
-        })
+          });
+        });
       }
 
       // Update confidence distribution
-      const confidenceDistribution = { high: 0, medium: 0, low: 0 }
+      const confidenceDistribution = { high: 0, medium: 0, low: 0 };
       if (result.detections) {
-        result.detections.forEach(detection => {
-          if (detection.confidence >= 0.7) confidenceDistribution.high++
-          else if (detection.confidence >= 0.4) confidenceDistribution.medium++
-          else confidenceDistribution.low++
-        })
+        result.detections.forEach((detection: any) => {
+          if (detection.confidence >= 0.7) confidenceDistribution.high++;
+          else if (detection.confidence >= 0.4) confidenceDistribution.medium++;
+          else confidenceDistribution.low++;
+        });
       }
 
       return {
@@ -253,11 +253,11 @@ export default function VideoAnalyticsDashboard() {
           totalFramesProcessed: prev.processingStats.totalFramesProcessed + (result.frames_processed || 0),
           fps: result.processing_fps || prev.processingStats.fps
         }
-      }
-    })
-  }
+      };
+    });
+  };
 
-  const handleVideoUpload = (event, feedId) => {
+  const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>, feedId: string) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
@@ -270,9 +270,9 @@ export default function VideoAnalyticsDashboard() {
     processVideo(file, feedId);
   };
 
-  const playVideo = (feedId) => {
+  const playVideo = (feedId: string) => {
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
-    const feed = feeds[feedId];
+    const feed = feeds[feedId as keyof typeof feeds];
     
     if (feed.videoFile && videoRef.current) {
       videoRef.current.src = URL.createObjectURL(feed.videoFile);
@@ -285,7 +285,7 @@ export default function VideoAnalyticsDashboard() {
     }
   };
 
-  const pauseVideo = (feedId) => {
+  const pauseVideo = (feedId: string) => {
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
     
     if (videoRef.current) {
@@ -298,8 +298,8 @@ export default function VideoAnalyticsDashboard() {
     }
   };
 
-  const toggleVideo = (feedId) => {
-    if (feeds[feedId].isStreaming) {
+  const toggleVideo = (feedId: string) => {
+    if (feeds[feedId as keyof typeof feeds].isStreaming) {
       pauseVideo(feedId);
     } else {
       playVideo(feedId);
@@ -470,7 +470,7 @@ export default function VideoAnalyticsDashboard() {
           </div>
         </header>
 
-        {/* Main Dashboard */}
+        {/* Main Dashboard - Video Feeds and Analytics */}
         <div style={{ padding: '32px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '32px' }}>
             {/* Video Feeds Section */}
@@ -505,7 +505,7 @@ export default function VideoAnalyticsDashboard() {
                   </div>
                 </div>
                 
-                {/* Video Grid - Always Side by Side */}
+                {/* Video Grid */}
                 <div style={{ padding: '32px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
                     {/* Feed 1 */}
@@ -892,7 +892,7 @@ export default function VideoAnalyticsDashboard() {
               </div>
             </div>
             
-            {/* Enhanced Analytics Sidebar */}
+            {/* Analytics Sidebar */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
               {/* Real-time Analytics */}
               <div style={{
@@ -1035,13 +1035,8 @@ export default function VideoAnalyticsDashboard() {
                       step="0.01"
                       value={config.confidence}
                       onChange={(e) => setConfig({...config, confidence: parseFloat(e.target.value)})}
+                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
                       style={{
-                        width: '100%',
-                        height: '8px',
-                        background: '#374151',
-                        borderRadius: '8px',
-                        appearance: 'none',
-                        cursor: 'pointer',
                         accentColor: '#06b6d4'
                       }}
                     />
@@ -1074,7 +1069,7 @@ export default function VideoAnalyticsDashboard() {
                 </div>
               </div>
               
-              {/* Processing Status & Alerts */}
+              {/* System Status & Alerts */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.6)',
                 backdropFilter: 'blur(20px)',
@@ -1083,18 +1078,16 @@ export default function VideoAnalyticsDashboard() {
                 padding: '32px',
                 boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{
-                      padding: '12px',
-                      background: 'linear-gradient(45deg, #ea580c, #dc2626)',
-                      borderRadius: '16px'
-                    }}>
-                      <AlertTriangle style={{ width: '24px', height: '24px', color: 'white' }} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>System Status</h3>
-                    </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{
+                    padding: '12px',
+                    background: 'linear-gradient(45deg, #ea580c, #dc2626)',
+                    borderRadius: '16px'
+                  }}>
+                    <AlertTriangle style={{ width: '24px', height: '24px', color: 'white' }} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>System Status</h3>
                   </div>
                 </div>
                 
@@ -1105,7 +1098,7 @@ export default function VideoAnalyticsDashboard() {
                       <p style={{ color: '#94a3b8', fontSize: '16px', margin: 0 }}>All systems operational</p>
                     </div>
                   ) : (
-                    alerts.map((alert) => (
+                    alerts.map((alert: any) => (
                       <div
                         key={alert.id}
                         style={{
