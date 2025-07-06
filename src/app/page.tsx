@@ -1187,47 +1187,66 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         border: '1px solid rgba(148, 163, 184, 0.1)',
                         aspectRatio: '16/9'
                       }}>
-                        {/* Video element with better setup */}
-                        <video
-                          ref={videoRef1}
-                          autoPlay
-                          muted
-                          playsInline
-                          controls={false}
-                          style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'cover',
-                            backgroundColor: '#000',
-                            display: 'block'
-                          }}
-                          onLoadStart={() => console.log('Feed1: Video load started')}
-                          onLoadedMetadata={() => console.log('Feed1: Video metadata loaded')}
-                          onLoadedData={() => console.log('Feed1: Video data loaded')}
-                          onCanPlay={() => console.log('Feed1: Video can play')}
-                          onPlay={() => console.log('Feed1: Video started playing')}
-                          onPlaying={() => console.log('Feed1: Video is playing')}
-                          onPause={() => console.log('Feed1: Video paused')}
-                          onError={(e) => console.error('Feed1: Video error:', e)}
-                          onAbort={() => console.warn('Feed1: Video aborted')}
-                          onStalled={() => console.warn('Feed1: Video stalled')}
-                          onSuspend={() => console.warn('Feed1: Video suspended')}
-                          onWaiting={() => console.warn('Feed1: Video waiting')}
-                        />
-                        <canvas
-                          ref={canvasRef1}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            pointerEvents: 'none',
-                            zIndex: 10
-                          }}
-                        />
+                        {/* Show uploaded video preview if available */}
+                        {videoPreview ? (
+                          <video
+                            ref={uploadVideoRef}
+                            src={videoPreview}
+                            controls
+                            style={{ 
+                              width: '100%', 
+                              height: '100%', 
+                              objectFit: 'contain',
+                              backgroundColor: '#000'
+                            }}
+                            onLoadedMetadata={() => console.log('Upload video metadata loaded')}
+                            onError={(e) => console.error('Upload video error:', e)}
+                          />
+                        ) : (
+                          /* Live camera feed */
+                          <>
+                            <video
+                              ref={videoRef1}
+                              autoPlay
+                              muted
+                              playsInline
+                              controls={false}
+                              style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'cover',
+                                backgroundColor: '#000',
+                                display: 'block'
+                              }}
+                              onLoadStart={() => console.log('Feed1: Video load started')}
+                              onLoadedMetadata={() => console.log('Feed1: Video metadata loaded')}
+                              onLoadedData={() => console.log('Feed1: Video data loaded')}
+                              onCanPlay={() => console.log('Feed1: Video can play')}
+                              onPlay={() => console.log('Feed1: Video started playing')}
+                              onPlaying={() => console.log('Feed1: Video is playing')}
+                              onPause={() => console.log('Feed1: Video paused')}
+                              onError={(e) => console.error('Feed1: Video error:', e)}
+                              onAbort={() => console.warn('Feed1: Video aborted')}
+                              onStalled={() => console.warn('Feed1: Video stalled')}
+                              onSuspend={() => console.warn('Feed1: Video suspended')}
+                              onWaiting={() => console.warn('Feed1: Video waiting')}
+                            />
+                            <canvas
+                              ref={canvasRef1}
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                pointerEvents: 'none',
+                                zIndex: 10
+                              }}
+                            />
+                          </>
+                        )}
                         
-                        {!feeds.feed1.isStreaming && (
+                        {!feeds.feed1.isStreaming && !videoPreview && (
                           <div style={{
                             position: 'absolute',
                             inset: 0,
@@ -1240,12 +1259,35 @@ export default function EnhancedVideoAnalyticsDashboard() {
                             <div style={{ textAlign: 'center' }}>
                               <Camera style={{ width: '80px', height: '80px', color: '#475569', margin: '0 auto 24px' }} />
                               <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#cbd5e1', margin: '0 0 8px 0' }}>Camera Feed 1</h3>
-                              <p style={{ color: '#64748b', margin: 0 }}>Click "Start Camera" to begin detection</p>
+                              <p style={{ color: '#64748b', margin: 0 }}>Click "Start Camera" or upload a video to analyze</p>
                             </div>
                           </div>
                         )}
                         
-                        {feeds.feed1.isStreaming && (
+                        {/* Video analysis overlay for uploaded videos */}
+                        {videoPreview && videoAnalysisResult && (
+                          <div style={{ position: 'absolute', bottom: '24px', left: '24px', zIndex: 15 }}>
+                            <div style={{
+                              background: 'rgba(0, 0, 0, 0.8)',
+                              backdropFilter: 'blur(8px)',
+                              color: 'white',
+                              padding: '16px 24px',
+                              borderRadius: '16px',
+                              border: '1px solid rgba(148, 163, 184, 0.1)'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <FileVideo style={{ width: '20px', height: '20px', color: '#8b5cf6' }} />
+                                <div>
+                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6' }}>{videoAnalysisResult.peak_occupancy}</div>
+                                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEAK DETECTED</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Live detection overlay for camera feeds */}
+                        {feeds.feed1.isStreaming && !videoPreview && (
                           <div style={{ position: 'absolute', bottom: '24px', left: '24px', zIndex: 15 }}>
                             <div style={{
                               background: 'rgba(0, 0, 0, 0.8)',
