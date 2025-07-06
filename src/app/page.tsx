@@ -588,7 +588,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
 
   // Start camera feed (existing code)
   const startCameraFeed = async (feedId: string) => {
+    console.log(`Starting camera feed for ${feedId}`);
     try {
+      // Request camera permission and stream
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           width: { ideal: 1280 }, 
@@ -597,12 +599,18 @@ export default function EnhancedVideoAnalyticsDashboard() {
         } 
       });
       
+      console.log(`Got media stream for ${feedId}:`, stream);
+      
       const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
       const streamRef = feedId === 'feed1' ? streamRef1 : streamRef2;
       
       if (videoRef.current) {
+        console.log(`Setting video source for ${feedId}`);
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        
+        // Force video to play
+        videoRef.current.play().catch(e => console.error(`Video play failed for ${feedId}:`, e));
         
         setFeeds(prev => ({
           ...prev,
@@ -611,17 +619,33 @@ export default function EnhancedVideoAnalyticsDashboard() {
         
         // Start real-time detection after video loads
         videoRef.current.onloadeddata = () => {
+          console.log(`Video loaded for ${feedId}, starting detection`);
           if (config.realTimeMode) {
             startRealTimeDetection(feedId);
           }
         };
+        
+        videoRef.current.onloadedmetadata = () => {
+          console.log(`Video metadata loaded for ${feedId}:`, {
+            width: videoRef.current?.videoWidth,
+            height: videoRef.current?.videoHeight
+          });
+        };
+        
+        // Add error handlers
+        videoRef.current.onerror = (e) => {
+          console.error(`Video error for ${feedId}:`, e);
+        };
+        
+      } else {
+        console.error(`Video ref not found for ${feedId}`);
       }
     } catch (error) {
       console.error(`Camera access failed for ${feedId}:`, error);
       setAlerts(prev => [{
         id: Date.now(),
         type: 'error',
-        message: `Camera access denied for ${feedId}. Please allow camera permissions.`,
+        message: `Camera access failed for ${feedId}: ${error.message || 'Unknown error'}`,
         time: new Date().toLocaleTimeString(),
         severity: 'high'
       }, ...prev.slice(0, 4)]);
@@ -691,6 +715,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
   };
 
   const toggleCamera = (feedId: string) => {
+    console.log(`Toggling camera for ${feedId}, current state:`, feeds[feedId].isStreaming);
     if (feeds[feedId].isStreaming) {
       stopCameraFeed(feedId);
     } else {
@@ -1075,7 +1100,16 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           autoPlay
                           muted
                           playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover',
+                            backgroundColor: '#000'
+                          }}
+                          onLoadStart={() => console.log('Video load started for feed1')}
+                          onCanPlay={() => console.log('Video can play for feed1')}
+                          onPlaying={() => console.log('Video is playing for feed1')}
+                          onError={(e) => console.error('Video error for feed1:', e)}
                         />
                         <canvas
                           ref={canvasRef1}
