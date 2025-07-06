@@ -129,6 +129,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
   
   const [alerts, setAlerts] = useState<any[]>([]);
   
+  const [heatmapMode, setHeatmapMode] = useState(false);
+  const [heatmapData, setHeatmapData] = useState<{[key: string]: number}>({});
+  
   const [config, setConfig] = useState({
     confidence: 0.08,
     maxPeople: 15,
@@ -137,7 +140,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
     motionDetection: true,
     showBoundingBoxes: true,
     realTimeMode: true,
-    detectionInterval: 1000 // ms between detections
+    detectionInterval: 1000, // ms between detections
+    showHeatmap: false
   });
 
   // Refs for live camera feeds
@@ -423,8 +427,20 @@ export default function EnhancedVideoAnalyticsDashboard() {
           }
         }));
         
-        // Draw real bounding boxes
-        drawRealBoundingBoxes(feedId, result.detections || []);
+        // Update heat map data for live feeds
+        if (result.detections && result.detections.length > 0) {
+          updateHeatmapData(result.detections, feedId);
+        }
+        
+        // Draw real bounding boxes or heat map
+        if (config.showHeatmap) {
+          const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
+          if (canvasRef.current) {
+            drawHeatmap(canvasRef.current, feedId);
+          }
+        } else {
+          drawRealBoundingBoxes(feedId, result.detections || []);
+        }
         
         // Update analytics
         updateRealTimeAnalytics(result, feedId);
@@ -445,7 +461,87 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   }, [isConnected, config, apiUrl]);
 
-  // Draw video analysis results on uploaded video
+  // Heat map generation and drawing
+  const updateHeatmapData = useCallback((detections: any[], feedId: string) => {
+    if (!detections.length) return;
+    
+    setHeatmapData(prev => {
+      const newData = { ...prev };
+      const gridSize = 50; // Size of heat map grid cells
+      
+      detections.forEach(detection => {
+        const [x1, y1, x2, y2] = detection.bbox;
+        const centerX = Math.floor((x1 + x2) / 2 / gridSize) * gridSize;
+        const centerY = Math.floor((y1 + y2) / 2 / gridSize) * gridSize;
+        const key = `${feedId}_${centerX}_${centerY}`;
+        
+        newData[key] = (newData[key] || 0) + 1;
+      });
+      
+      return newData;
+    });
+  }, []);
+
+  const drawHeatmap = useCallback((canvas: HTMLCanvasElement, feedId: string) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const gridSize = 50;
+    const maxDensity = Math.max(...Object.values(heatmapData).filter(v => typeof v === 'number')) || 1;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw heat map cells
+    Object.entries(heatmapData).forEach(([key, density]) => {
+      if (!key.startsWith(feedId) || typeof density !== 'number') return;
+      
+      const [, x, y] = key.split('_').map(Number);
+      const intensity = density / maxDensity;
+      
+      // Color gradient: blue (low) -> green (medium) -> red (high)
+      let color;
+      if (intensity < 0.3) {
+        color = `rgba(0, 100, 255, ${intensity * 0.6})`; // Blue
+      } else if (intensity < 0.7) {
+        color = `rgba(0, 255, 100, ${intensity * 0.6})`; // Green
+      } else {
+        color = `rgba(255, 50, 0, ${intensity * 0.8})`; // Red
+      }
+      
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, gridSize, gridSize);
+    });
+    
+    // Draw legend
+    const legendX = canvas.width - 120;
+    const legendY = 20;
+    
+    // Legend background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(legendX - 10, legendY - 10, 110, 80);
+    
+    // Legend text
+    ctx.fillStyle = 'white';
+    ctx.font = '12px system-ui';
+    ctx.fillText('Activity Density', legendX, legendY + 10);
+    
+    // Legend gradient
+    const legendColors = [
+      { color: 'rgba(0, 100, 255, 0.6)', label: 'Low' },
+      { color: 'rgba(0, 255, 100, 0.6)', label: 'Medium' },
+      { color: 'rgba(255, 50, 0, 0.8)', label: 'High' }
+    ];
+    
+    legendColors.forEach((item, index) => {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX, legendY + 20 + (index * 15), 15, 10);
+      ctx.fillStyle = 'white';
+      ctx.fillText(item.label, legendX + 20, legendY + 30 + (index * 15));
+    });
+  }, [heatmapData]);
+
+  // Enhanced video analysis drawing with heat map support
   const drawVideoAnalysisResults = useCallback((timelineData: any[] = []) => {
     const video = uploadVideoRef.current;
     const canvas = canvasRef1.current;
@@ -470,16 +566,25 @@ export default function EnhancedVideoAnalyticsDashboard() {
     canvas.width = videoRect.width;
     canvas.height = videoRect.height;
     
-    console.log('Canvas setup:', {
-      canvasSize: { width: canvas.width, height: canvas.height },
-      videoSize: { width: video.videoWidth, height: video.videoHeight },
-      videoCurrentTime: video.currentTime
-    });
-    
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Get current video time
+    // Heat map mode
+    if (config.showHeatmap) {
+      // Collect all detections for heat map
+      const allDetections: any[] = [];
+      timelineData.forEach(entry => {
+        if (entry.detections) {
+          allDetections.push(...entry.detections);
+        }
+      });
+      
+      updateHeatmapData(allDetections, 'video');
+      drawHeatmap(canvas, 'video');
+      return;
+    }
+    
+    // Regular detection mode (existing logic)
     const currentTime = video.currentTime;
     
     // Find the closest timeline entry to current video time
@@ -489,23 +594,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
       return currDiff < prevDiff ? curr : prev;
     });
     
-    console.log('Closest entry found:', {
-      timestamp: closestEntry.timestamp,
-      currentTime: currentTime,
-      detectionsCount: closestEntry.detections?.length || 0,
-      hasDetections: !!closestEntry.detections,
-      detectionsProp: Object.keys(closestEntry),
-      fullEntry: closestEntry
-    });
-    
     if (!closestEntry || !closestEntry.detections || closestEntry.detections.length === 0) {
-      console.log('❌ No detections to draw because:', {
-        hasEntry: !!closestEntry,
-        hasDetectionsProperty: !!closestEntry?.detections,
-        detectionsLength: closestEntry?.detections?.length || 0,
-        entryKeys: closestEntry ? Object.keys(closestEntry) : 'no entry',
-        entryStructure: closestEntry
-      });
       return;
     }
     
@@ -513,92 +602,65 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    console.log('Drawing detections:', {
-      detectionsCount: closestEntry.detections.length,
-      scale: { x: scaleX, y: scaleY },
-      timestamp: currentTime.toFixed(2)
-    });
-    
-    // Draw each detection
+    // Draw each detection with thin, transparent style
     closestEntry.detections.forEach((detection: any, index: number) => {
-      console.log(`Drawing detection ${index}:`, detection);
-      
       const { bbox, confidence } = detection;
-      if (!bbox || bbox.length !== 4) {
-        console.warn(`Invalid bbox for detection ${index}:`, bbox);
-        return;
-      }
+      if (!bbox || bbox.length !== 4) return;
       
       const [x1, y1, x2, y2] = bbox;
-      
-      // Scale coordinates to canvas size
       const scaledX1 = x1 * scaleX;
       const scaledY1 = y1 * scaleY;
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
-      console.log(`Detection ${index} coordinates:`, {
-        original: [x1, y1, x2, y2],
-        scaled: [scaledX1, scaledY1, scaledX2, scaledY2]
-      });
-      
-      // Dynamic color and style - thin and transparent like reference
-      let color = 'rgba(255, 255, 255, 0.8)'; // Semi-transparent white
-      let thickness = 1; // Very thin lines
-      
-      // Optional: slight color variation by confidence (still transparent)
+      // Thin, transparent style
+      let color = 'rgba(255, 255, 255, 0.8)';
       if (confidence >= 0.7) {
-        color = 'rgba(16, 185, 129, 0.7)'; // Semi-transparent green
+        color = 'rgba(16, 185, 129, 0.7)';
       } else if (confidence >= 0.4) {
-        color = 'rgba(245, 158, 11, 0.7)'; // Semi-transparent yellow
+        color = 'rgba(245, 158, 11, 0.7)';
       } else {
-        color = 'rgba(239, 68, 68, 0.7)'; // Semi-transparent red
+        color = 'rgba(239, 68, 68, 0.7)';
       }
       
-      // Draw thin, transparent bounding box
       ctx.strokeStyle = color;
-      ctx.lineWidth = thickness;
+      ctx.lineWidth = 1;
       ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
       
-      // Optional: Small, minimal confidence label (much smaller and more transparent)
-      if (confidence > 0.5) { // Only show for higher confidence
+      // Small confidence label for high confidence only
+      if (confidence > 0.5) {
         ctx.font = '10px system-ui';
         const text = `${(confidence * 100).toFixed(0)}%`;
         const textMetrics = ctx.measureText(text);
         
-        // Very subtle background
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.fillRect(scaledX1, scaledY1 - 15, textMetrics.width + 6, 12);
         
-        // Small text
         ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         ctx.fillText(text, scaledX1 + 3, scaledY1 - 5);
       }
-      
-      // Remove center points and person IDs for cleaner look
-      // (commented out the center point and person ID drawing)
     });
     
-    // Always draw header to confirm canvas is working
-    const headerText = `VIDEO: ${closestEntry.detections.length} People at ${currentTime.toFixed(1)}s`;
+    // Header with mode indicator
+    const headerText = config.showHeatmap 
+      ? `HEATMAP: Activity Density` 
+      : `VIDEO: ${closestEntry.detections.length} People at ${currentTime.toFixed(1)}s`;
     ctx.font = 'bold 16px system-ui';
     const headerMetrics = ctx.measureText(headerText);
     
     ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
     ctx.fillRect(10, 10, headerMetrics.width + 20, 35);
     
-    ctx.fillStyle = '#8b5cf6';
+    ctx.fillStyle = config.showHeatmap ? '#ff6b35' : '#8b5cf6';
     ctx.fillText(headerText, 20, 32);
     
-    // Analysis indicator
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.9)';
+    // Mode indicator
+    ctx.fillStyle = config.showHeatmap ? 'rgba(255, 107, 53, 0.9)' : 'rgba(139, 92, 246, 0.9)';
     ctx.fillRect(canvas.width - 100, 10, 90, 25);
     ctx.fillStyle = 'white';
     ctx.font = 'bold 12px system-ui';
-    ctx.fillText('● ANALYZED', canvas.width - 95, 27);
-    
-    console.log('Finished drawing detections');
-  }, []);
+    ctx.fillText(config.showHeatmap ? '🔥 HEATMAP' : '● ANALYZED', canvas.width - 95, 27);
+  }, [config.showHeatmap, updateHeatmapData, drawHeatmap]);
   const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
@@ -1309,7 +1371,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                 </div>
                 
                 <div style={{ padding: '32px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 320px', gap: '32px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 300px', gap: '32px' }}>
                     {/* Feed 1 */}
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -1385,7 +1447,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         overflow: 'hidden',
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
                         border: '1px solid rgba(148, 163, 184, 0.1)',
-                        aspectRatio: '16/9'
+                        aspectRatio: '16/9',
+                        minHeight: '350px' // Larger minimum height
                       }}>
                         {/* Show uploaded video preview if available */}
                         {videoPreview ? (
@@ -1618,7 +1681,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         overflow: 'hidden',
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
                         border: '1px solid rgba(148, 163, 184, 0.1)',
-                        aspectRatio: '16/9'
+                        aspectRatio: '16/9',
+                        minHeight: '350px' // Larger minimum height
                       }}>
                         <video
                           ref={videoRef2}
@@ -2038,12 +2102,65 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', fontWeight: '600', color: '#cbd5e1', cursor: 'pointer' }}>
                         <input
                           type="checkbox"
+                          checked={config.showHeatmap}
+                          onChange={(e) => {
+                            setConfig({...config, showHeatmap: e.target.checked});
+                            // Redraw with new mode if video analysis exists
+                            if (videoAnalysisResult?.detection_timeline && e.target.checked !== config.showHeatmap) {
+                              setTimeout(() => drawVideoAnalysisResults(videoAnalysisResult.detection_timeline), 100);
+                            }
+                          }}
+                          style={{ accentColor: '#ff6b35' }}
+                        />
+                        🔥 Show Activity Heatmap
+                      </label>
+                    </div>
+                    
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', fontWeight: '600', color: '#cbd5e1', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
                           checked={config.alertEnabled}
                           onChange={(e) => setConfig({...config, alertEnabled: e.target.checked})}
                           style={{ accentColor: '#06b6d4' }}
                         />
                         Enable Alerts
                       </label>
+                    </div>
+                    
+                    {/* Heat map controls */}
+                    <div style={{ 
+                      padding: '16px', 
+                      background: 'rgba(30, 41, 59, 0.5)', 
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 107, 53, 0.3)'
+                    }}>
+                      <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#ff6b35', margin: '0 0 12px 0' }}>🔥 Heat Map Options</h4>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <button
+                          onClick={() => {
+                            setHeatmapData({});
+                            console.log('Heat map data cleared');
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: '#6b7280',
+                            color: 'white',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Clear Heat Map Data
+                        </button>
+                        
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                          Heat map shows activity density over time. Red areas = high activity.
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
