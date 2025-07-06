@@ -531,7 +531,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
         processingStats: {
           avgProcessingTime: result.processing_time_ms || prev.processingStats.avgProcessingTime,
           totalFramesProcessed: prev.processingStats.totalFramesProcessed + 1,
-          fps: result.performance_stats?.fps || prev.processingStats.fps
+          fps: prev.processingStats.fps // Keep existing FPS since it's not in performance_stats
         }
       };
     });
