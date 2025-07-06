@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Shield, Camera, Video, VideoOff, Play, Pause, Upload, Settings, Activity, Wifi, WifiOff, AlertTriangle } from 'lucide-react'
+import { Shield, Video, VideoOff, Play, Pause, Upload, Settings, Activity, Wifi, WifiOff, AlertTriangle } from 'lucide-react'
 
 export default function HomePage() {
   const [feeds, setFeeds] = useState({
@@ -59,7 +59,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Security Feeds</h2>
               <div className="flex space-x-2">
-                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center space-x-2">
+                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center space-x-2 transition-colors">
                   <Upload className="h-4 w-4" />
                   <span>Upload</span>
                 </button>
@@ -77,10 +77,10 @@ export default function HomePage() {
                   </h3>
                   <button
                     onClick={() => toggleFeed('feed1')}
-                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm ${
+                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm transition-colors ${
                       feeds.feed1.isStreaming 
-                        ? 'bg-red-600 hover:bg-red-700' 
-                        : 'bg-green-600 hover:bg-green-700'
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
                     {feeds.feed1.isStreaming ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
@@ -127,10 +127,10 @@ export default function HomePage() {
                   </h3>
                   <button
                     onClick={() => toggleFeed('feed2')}
-                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm ${
+                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm transition-colors ${
                       feeds.feed2.isStreaming 
-                        ? 'bg-red-600 hover:bg-red-700' 
-                        : 'bg-green-600 hover:bg-green-700'
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
                     {feeds.feed2.isStreaming ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
