@@ -261,6 +261,13 @@ export default function EnhancedVideoAnalyticsDashboard() {
       setVideoAnalysisResult(result);
       setIsProcessingVideo(false);
 
+      // Draw initial detections on the video
+      setTimeout(() => {
+        if (result.detection_timeline && result.detection_timeline.length > 0) {
+          drawVideoAnalysisResults(result.detection_timeline);
+        }
+      }, 500);
+
       // Update analytics with video results
       setAnalytics(prev => ({
         ...prev,
@@ -398,7 +405,121 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   }, [isConnected, config, apiUrl]);
 
-  // Draw real bounding boxes from API response (existing code)
+  // Draw video analysis results on uploaded video
+  const drawVideoAnalysisResults = useCallback((timelineData: any[] = []) => {
+    const video = uploadVideoRef.current;
+    const canvas = canvasRef1.current;
+    
+    if (!video || !canvas || !timelineData.length) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Set canvas size to match video display
+    const rect = video.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Get current video time
+    const currentTime = video.currentTime;
+    
+    // Find the closest timeline entry to current video time
+    const closestEntry = timelineData.reduce((prev, curr) => {
+      return (Math.abs(curr.timestamp - currentTime) < Math.abs(prev.timestamp - currentTime)) ? curr : prev;
+    });
+    
+    if (!closestEntry || !closestEntry.detections) return;
+    
+    // Calculate scaling factors
+    const scaleX = canvas.width / (video.videoWidth || 640);
+    const scaleY = canvas.height / (video.videoHeight || 480);
+    
+    console.log(`Drawing ${closestEntry.detections.length} detections at time ${currentTime.toFixed(2)}s`);
+    
+    // Draw each detection
+    closestEntry.detections.forEach((detection: any, index: number) => {
+      const { bbox, confidence } = detection;
+      const [x1, y1, x2, y2] = bbox;
+      
+      // Scale coordinates to canvas size
+      const scaledX1 = x1 * scaleX;
+      const scaledY1 = y1 * scaleY;
+      const scaledX2 = x2 * scaleX;
+      const scaledY2 = y2 * scaleY;
+      
+      // Dynamic color based on confidence
+      let color, thickness;
+      if (confidence >= 0.7) {
+        color = '#10b981'; // Green for high confidence
+        thickness = 3;
+      } else if (confidence >= 0.4) {
+        color = '#f59e0b'; // Yellow for medium confidence
+        thickness = 2;
+      } else {
+        color = '#ef4444'; // Red for low confidence
+        thickness = 2;
+      }
+      
+      // Draw bounding box
+      ctx.strokeStyle = color;
+      ctx.lineWidth = thickness;
+      ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+      
+      // Draw confidence label with background
+      ctx.font = 'bold 14px system-ui';
+      const text = `Person ${index + 1}: ${(confidence * 100).toFixed(1)}%`;
+      const textMetrics = ctx.measureText(text);
+      const textWidth = textMetrics.width;
+      
+      // Background for text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(scaledX1, scaledY1 - 28, textWidth + 12, 24);
+      
+      // Text
+      ctx.fillStyle = color;
+      ctx.fillText(text, scaledX1 + 6, scaledY1 - 8);
+      
+      // Center point
+      const centerX = (scaledX1 + scaledX2) / 2;
+      const centerY = (scaledY1 + scaledY2) / 2;
+      
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 2, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Draw person ID
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 12px system-ui';
+      ctx.fillText(`${index + 1}`, centerX - 4, centerY + 4);
+    });
+    
+    // Header overlay with detection count and timestamp
+    const headerText = `VIDEO: ${closestEntry.detections.length} People at ${currentTime.toFixed(1)}s`;
+    ctx.font = 'bold 16px system-ui';
+    const headerMetrics = ctx.measureText(headerText);
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+    ctx.fillRect(10, 10, headerMetrics.width + 20, 35);
+    
+    ctx.fillStyle = '#8b5cf6';
+    ctx.fillText(headerText, 20, 32);
+    
+    // Analysis indicator
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.9)';
+    ctx.fillRect(canvas.width - 100, 10, 90, 25);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillText('● ANALYZED', canvas.width - 95, 27);
+  }, []);
   const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
@@ -1189,19 +1310,52 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       }}>
                         {/* Show uploaded video preview if available */}
                         {videoPreview ? (
-                          <video
-                            ref={uploadVideoRef}
-                            src={videoPreview}
-                            controls
-                            style={{ 
-                              width: '100%', 
-                              height: '100%', 
-                              objectFit: 'contain',
-                              backgroundColor: '#000'
-                            }}
-                            onLoadedMetadata={() => console.log('Upload video metadata loaded')}
-                            onError={(e) => console.error('Upload video error:', e)}
-                          />
+                          <>
+                            <video
+                              ref={uploadVideoRef}
+                              src={videoPreview}
+                              controls
+                              style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'contain',
+                                backgroundColor: '#000'
+                              }}
+                              onLoadedMetadata={() => console.log('Upload video metadata loaded')}
+                              onError={(e) => console.error('Upload video error:', e)}
+                              onTimeUpdate={() => {
+                                // Update detections as video plays
+                                if (videoAnalysisResult?.detection_timeline) {
+                                  drawVideoAnalysisResults(videoAnalysisResult.detection_timeline);
+                                }
+                              }}
+                              onSeeked={() => {
+                                // Update detections when user scrubs
+                                if (videoAnalysisResult?.detection_timeline) {
+                                  drawVideoAnalysisResults(videoAnalysisResult.detection_timeline);
+                                }
+                              }}
+                              onPlay={() => {
+                                // Start updating detections during playback
+                                if (videoAnalysisResult?.detection_timeline) {
+                                  drawVideoAnalysisResults(videoAnalysisResult.detection_timeline);
+                                }
+                              }}
+                            />
+                            {/* Canvas overlay for video analysis results */}
+                            <canvas
+                              ref={canvasRef1}
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                pointerEvents: 'none',
+                                zIndex: 10
+                              }}
+                            />
+                          </>
                         ) : (
                           /* Live camera feed */
                           <>
