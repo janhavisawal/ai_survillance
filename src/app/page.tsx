@@ -586,66 +586,138 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }));
   };
 
-  // Start camera feed (existing code)
+  // Start camera feed with better error handling and video setup
   const startCameraFeed = async (feedId: string) => {
     console.log(`Starting camera feed for ${feedId}`);
+    
     try {
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera not supported in this browser');
+      }
+
       // Request camera permission and stream
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        } 
-      });
+      const constraints = {
+        video: {
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          frameRate: { ideal: 30, min: 15 },
+          facingMode: 'user'
+        },
+        audio: false
+      };
+
+      console.log(`Requesting media access for ${feedId} with constraints:`, constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       console.log(`Got media stream for ${feedId}:`, stream);
+      console.log(`Stream tracks:`, stream.getTracks().map(track => ({
+        kind: track.kind,
+        label: track.label,
+        enabled: track.enabled,
+        readyState: track.readyState
+      })));
       
       const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
       const streamRef = feedId === 'feed1' ? streamRef1 : streamRef2;
       
-      if (videoRef.current) {
-        console.log(`Setting video source for ${feedId}`);
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        
-        // Force video to play
-        videoRef.current.play().catch(e => console.error(`Video play failed for ${feedId}:`, e));
-        
-        setFeeds(prev => ({
-          ...prev,
-          [feedId]: { ...prev[feedId], isStreaming: true }
-        }));
-        
-        // Start real-time detection after video loads
-        videoRef.current.onloadeddata = () => {
-          console.log(`Video loaded for ${feedId}, starting detection`);
-          if (config.realTimeMode) {
-            startRealTimeDetection(feedId);
-          }
-        };
-        
-        videoRef.current.onloadedmetadata = () => {
-          console.log(`Video metadata loaded for ${feedId}:`, {
-            width: videoRef.current?.videoWidth,
-            height: videoRef.current?.videoHeight
-          });
-        };
-        
-        // Add error handlers
-        videoRef.current.onerror = (e) => {
-          console.error(`Video error for ${feedId}:`, e);
-        };
-        
-      } else {
-        console.error(`Video ref not found for ${feedId}`);
+      if (!videoRef.current) {
+        console.error(`Video element not found for ${feedId}`);
+        return;
       }
+
+      console.log(`Setting up video element for ${feedId}`);
+      
+      // Set up video element
+      const videoElement = videoRef.current;
+      videoElement.srcObject = stream;
+      streamRef.current = stream;
+      
+      // Update state immediately
+      setFeeds(prev => ({
+        ...prev,
+        [feedId]: { ...prev[feedId], isStreaming: true }
+      }));
+
+      // Set up event handlers
+      videoElement.onloadedmetadata = () => {
+        console.log(`Video metadata loaded for ${feedId}:`, {
+          videoWidth: videoElement.videoWidth,
+          videoHeight: videoElement.videoHeight,
+          duration: videoElement.duration
+        });
+      };
+
+      videoElement.onloadeddata = () => {
+        console.log(`Video data loaded for ${feedId}, attempting to play`);
+        
+        // Try to play the video
+        videoElement.play()
+          .then(() => {
+            console.log(`Video playing successfully for ${feedId}`);
+            // Start detection after video is playing
+            if (config.realTimeMode) {
+              console.log(`Starting real-time detection for ${feedId}`);
+              setTimeout(() => startRealTimeDetection(feedId), 1000);
+            }
+          })
+          .catch(e => {
+            console.error(`Video play failed for ${feedId}:`, e);
+            // Try muted autoplay
+            videoElement.muted = true;
+            return videoElement.play();
+          })
+          .then(() => {
+            console.log(`Video playing (muted) for ${feedId}`);
+          })
+          .catch(e => {
+            console.error(`Video play completely failed for ${feedId}:`, e);
+          });
+      };
+
+      videoElement.oncanplay = () => {
+        console.log(`Video can play for ${feedId}`);
+      };
+
+      videoElement.onplaying = () => {
+        console.log(`Video is actually playing for ${feedId}`);
+      };
+
+      videoElement.onerror = (e) => {
+        console.error(`Video element error for ${feedId}:`, e);
+      };
+
+      videoElement.onabort = () => {
+        console.warn(`Video loading aborted for ${feedId}`);
+      };
+
+      videoElement.onstalled = () => {
+        console.warn(`Video stalled for ${feedId}`);
+      };
+
+      // Force load the video
+      videoElement.load();
+      
     } catch (error) {
       console.error(`Camera access failed for ${feedId}:`, error);
+      
+      let errorMessage = 'Unknown camera error';
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'Camera permission denied. Please allow camera access and try again.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'No camera found. Please ensure a camera is connected.';
+      } else if (error.name === 'NotReadableError') {
+        errorMessage = 'Camera is already in use by another application.';
+      } else if (error.name === 'OverconstrainedError') {
+        errorMessage = 'Camera does not meet the required constraints.';
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       setAlerts(prev => [{
         id: Date.now(),
         type: 'error',
-        message: `Camera access failed for ${feedId}: ${error.message || 'Unknown error'}`,
+        message: `Camera failed for ${feedId}: ${errorMessage}`,
         time: new Date().toLocaleTimeString(),
         severity: 'high'
       }, ...(prev || []).slice(0, 4)]);
@@ -714,12 +786,33 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   };
 
+  const testCamera = async () => {
+    console.log('Testing camera access...');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      console.log('✅ Camera test successful:', stream);
+      stream.getTracks().forEach(track => track.stop()); // Clean up test stream
+      return true;
+    } catch (error) {
+      console.error('❌ Camera test failed:', error);
+      return false;
+    }
+  };
+
   const toggleCamera = (feedId: string) => {
     console.log(`Toggling camera for ${feedId}, current state:`, feeds[feedId].isStreaming);
+    
     if (feeds[feedId].isStreaming) {
       stopCameraFeed(feedId);
     } else {
-      startCameraFeed(feedId);
+      // Test camera first
+      testCamera().then(canAccess => {
+        if (canAccess) {
+          startCameraFeed(feedId);
+        } else {
+          console.error('Camera test failed, not starting feed');
+        }
+      });
     }
   };
 
@@ -1094,22 +1187,32 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         border: '1px solid rgba(148, 163, 184, 0.1)',
                         aspectRatio: '16/9'
                       }}>
-                        {/* Always show live camera feed */}
+                        {/* Video element with better setup */}
                         <video
                           ref={videoRef1}
                           autoPlay
                           muted
                           playsInline
+                          controls={false}
                           style={{ 
                             width: '100%', 
                             height: '100%', 
                             objectFit: 'cover',
-                            backgroundColor: '#000'
+                            backgroundColor: '#000',
+                            display: 'block'
                           }}
-                          onLoadStart={() => console.log('Video load started for feed1')}
-                          onCanPlay={() => console.log('Video can play for feed1')}
-                          onPlaying={() => console.log('Video is playing for feed1')}
-                          onError={(e) => console.error('Video error for feed1:', e)}
+                          onLoadStart={() => console.log('Feed1: Video load started')}
+                          onLoadedMetadata={() => console.log('Feed1: Video metadata loaded')}
+                          onLoadedData={() => console.log('Feed1: Video data loaded')}
+                          onCanPlay={() => console.log('Feed1: Video can play')}
+                          onPlay={() => console.log('Feed1: Video started playing')}
+                          onPlaying={() => console.log('Feed1: Video is playing')}
+                          onPause={() => console.log('Feed1: Video paused')}
+                          onError={(e) => console.error('Feed1: Video error:', e)}
+                          onAbort={() => console.warn('Feed1: Video aborted')}
+                          onStalled={() => console.warn('Feed1: Video stalled')}
+                          onSuspend={() => console.warn('Feed1: Video suspended')}
+                          onWaiting={() => console.warn('Feed1: Video waiting')}
                         />
                         <canvas
                           ref={canvasRef1}
@@ -1247,7 +1350,26 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           autoPlay
                           muted
                           playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          controls={false}
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover',
+                            backgroundColor: '#000',
+                            display: 'block'
+                          }}
+                          onLoadStart={() => console.log('Feed2: Video load started')}
+                          onLoadedMetadata={() => console.log('Feed2: Video metadata loaded')}
+                          onLoadedData={() => console.log('Feed2: Video data loaded')}
+                          onCanPlay={() => console.log('Feed2: Video can play')}
+                          onPlay={() => console.log('Feed2: Video started playing')}
+                          onPlaying={() => console.log('Feed2: Video is playing')}
+                          onPause={() => console.log('Feed2: Video paused')}
+                          onError={(e) => console.error('Feed2: Video error:', e)}
+                          onAbort={() => console.warn('Feed2: Video aborted')}
+                          onStalled={() => console.warn('Feed2: Video stalled')}
+                          onSuspend={() => console.warn('Feed2: Video suspended')}
+                          onWaiting={() => console.warn('Feed2: Video waiting')}
                         />
                         <canvas
                           ref={canvasRef2}
