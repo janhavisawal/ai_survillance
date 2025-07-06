@@ -394,10 +394,10 @@ const SecurityDashboard: React.FC = () => {
               <div className="flex space-x-2">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="btn-primary"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-2 transition-colors"
                 >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload
+                  <Upload className="h-4 w-4" />
+                  <span>Upload</span>
                 </button>
                 
                 <input
@@ -421,10 +421,10 @@ const SecurityDashboard: React.FC = () => {
                   </h3>
                   <button
                     onClick={() => feeds.feed1.isStreaming ? stopCamera('feed1') : startCamera('feed1')}
-                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm ${
+                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm transition-colors ${
                       feeds.feed1.isStreaming 
-                        ? 'btn-danger' 
-                        : 'btn-success'
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
                     {feeds.feed1.isStreaming ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
@@ -432,7 +432,7 @@ const SecurityDashboard: React.FC = () => {
                   </button>
                 </div>
                 
-                <div className="relative bg-black rounded-lg overflow-hidden video-container" style={{ aspectRatio: '16/9' }}>
+                <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
                   <video
                     ref={videoRef1}
                     autoPlay
@@ -442,7 +442,7 @@ const SecurityDashboard: React.FC = () => {
                   />
                   <canvas
                     ref={canvasRef1}
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none video-overlay"
+                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
                   />
                   
                   {!feeds.feed1.isStreaming && (
@@ -463,7 +463,7 @@ const SecurityDashboard: React.FC = () => {
                   )}
                   
                   {/* Feed 1 Stats Overlay */}
-                  <div className="absolute bottom-3 left-3 glass-morphism-dark text-white px-3 py-2 rounded-lg">
+                  <div className="absolute bottom-3 left-3 bg-black bg-opacity-80 backdrop-blur-sm text-white px-3 py-2 rounded-lg">
                     <div className="text-sm font-medium text-blue-400">
                       Count: {feeds.feed1.currentCount}
                     </div>
@@ -483,10 +483,10 @@ const SecurityDashboard: React.FC = () => {
                   </h3>
                   <button
                     onClick={() => feeds.feed2.isStreaming ? stopCamera('feed2') : startCamera('feed2')}
-                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm ${
+                    className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 text-sm transition-colors ${
                       feeds.feed2.isStreaming 
-                        ? 'btn-danger' 
-                        : 'btn-success'
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
                     {feeds.feed2.isStreaming ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
@@ -494,7 +494,7 @@ const SecurityDashboard: React.FC = () => {
                   </button>
                 </div>
                 
-                <div className="relative bg-black rounded-lg overflow-hidden video-container" style={{ aspectRatio: '16/9' }}>
+                <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
                   <video
                     ref={videoRef2}
                     autoPlay
@@ -504,7 +504,7 @@ const SecurityDashboard: React.FC = () => {
                   />
                   <canvas
                     ref={canvasRef2}
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none video-overlay"
+                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
                   />
                   
                   {!feeds.feed2.isStreaming && (
@@ -525,7 +525,7 @@ const SecurityDashboard: React.FC = () => {
                   )}
                   
                   {/* Feed 2 Stats Overlay */}
-                  <div className="absolute bottom-3 left-3 glass-morphism-dark text-white px-3 py-2 rounded-lg">
+                  <div className="absolute bottom-3 left-3 bg-black bg-opacity-80 backdrop-blur-sm text-white px-3 py-2 rounded-lg">
                     <div className="text-sm font-medium text-green-400">
                       Count: {feeds.feed2.currentCount}
                     </div>
@@ -542,7 +542,7 @@ const SecurityDashboard: React.FC = () => {
         {/* Right Sidebar - Stats and Controls */}
         <div className="space-y-6">
           {/* Combined Stats for Both Feeds */}
-          <div className="card-security">
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
             <h3 className="text-lg font-semibold mb-4 flex items-center">
               <Activity className="h-5 w-5 mr-2" />
               Live Statistics
@@ -561,7 +561,7 @@ const SecurityDashboard: React.FC = () => {
               <div className="flex-1 border border-gray-700 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-blue-400 font-medium">Feed 1</span>
-                  <div className={feeds.feed1.isStreaming ? 'status-online' : 'status-offline'}></div>
+                  <div className={`w-2 h-2 rounded-full ${feeds.feed1.isStreaming ? 'bg-green-400' : 'bg-gray-500'}`}></div>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="text-center">
@@ -578,7 +578,7 @@ const SecurityDashboard: React.FC = () => {
               <div className="flex-1 border border-gray-700 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-green-400 font-medium">Feed 2</span>
-                  <div className={feeds.feed2.isStreaming ? 'status-online' : 'status-offline'}></div>
+                  <div className={`w-2 h-2 rounded-full ${feeds.feed2.isStreaming ? 'bg-green-400' : 'bg-gray-500'}`}></div>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="text-center">
@@ -606,7 +606,7 @@ const SecurityDashboard: React.FC = () => {
           </div>
           
           {/* Configuration */}
-          <div className="card-security">
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
             <h3 className="text-lg font-semibold mb-4 flex items-center">
               <Settings className="h-5 w-5 mr-2" />
               Configuration
@@ -664,7 +664,7 @@ const SecurityDashboard: React.FC = () => {
           </div>
           
           {/* Alerts */}
-          <div className="card-security">
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold flex items-center">
                 <AlertTriangle className="h-5 w-5 mr-2" />
