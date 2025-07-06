@@ -12,22 +12,13 @@ import {
 
 // Video Analysis Result Interface
 interface VideoAnalysisResult {
-  video_path: string;
-  analysis_summary: {
-    total_frames: number;
-    processed_frames: number;
-    total_detections: number;
-    unique_people_detected: number;
-    peak_occupancy: number;
-    avg_occupancy: number;
-    confidence_distribution: {
-      high: number;
-      medium: number;
-      low: number;
-    };
-  };
-  timeline_data: Array<{
-    timestamp: string;
+  video_id: string;
+  timestamp: string;
+  total_detections: number;
+  peak_occupancy: number;
+  avg_confidence: number;
+  detection_timeline: Array<{
+    timestamp: number;
     frame_number: number;
     people_count: number;
     avg_confidence: number;
@@ -37,10 +28,44 @@ interface VideoAnalysisResult {
       center: [number, number];
     }>;
   }>;
+  confidence_distribution: {
+    high: number;
+    medium: number;
+    low: number;
+  };
   processing_stats: {
     total_processing_time: number;
-    avg_time_per_frame: number;
-    fps_processed: number;
+    frames_analyzed: number;
+    sample_interval: number;
+  };
+  video_duration: number;
+  frames_processed: number;
+  feed_id: string;
+}
+
+// Detection Result from API
+interface DetectionResult {
+  frame_id: string;
+  timestamp: string;
+  people_count: number;
+  detections: Array<{
+    center: [number, number];
+    bbox: [number, number, number, number];
+    confidence: number;
+    area: number;
+    width: number;
+    height: number;
+  }>;
+  confidence_threshold: number;
+  processing_time_ms: number;
+  model_info: {
+    model: string;
+    device: string;
+    feed_id: string;
+  };
+  performance_stats: {
+    processing_time_ms: number;
+    detections_found: number;
   };
 }
 
@@ -116,16 +141,16 @@ export default function EnhancedVideoAnalyticsDashboard() {
   });
 
   // Refs for live camera feeds
-  const fileInputRef1 = useRef(null);
-  const fileInputRef2 = useRef(null);
-  const videoRef1 = useRef(null);
-  const videoRef2 = useRef(null);
-  const canvasRef1 = useRef(null);
-  const canvasRef2 = useRef(null);
-  const detectionIntervalRef1 = useRef(null);
-  const detectionIntervalRef2 = useRef(null);
-  const streamRef1 = useRef(null);
-  const streamRef2 = useRef(null);
+  const fileInputRef1 = useRef<HTMLInputElement | null>(null);
+  const fileInputRef2 = useRef<HTMLInputElement | null>(null);
+  const videoRef1 = useRef<HTMLVideoElement | null>(null);
+  const videoRef2 = useRef<HTMLVideoElement | null>(null);
+  const canvasRef1 = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef2 = useRef<HTMLCanvasElement | null>(null);
+  const detectionIntervalRef1 = useRef<NodeJS.Timeout | null>(null);
+  const detectionIntervalRef2 = useRef<NodeJS.Timeout | null>(null);
+  const streamRef1 = useRef<MediaStream | null>(null);
+  const streamRef2 = useRef<MediaStream | null>(null);
 
   // Refs for video upload
   const videoUploadInputRef = useRef<HTMLInputElement>(null);
@@ -216,8 +241,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const formData = new FormData();
       formData.append('file', uploadedFile);
       formData.append('confidence', config.confidence.toString());
-      formData.append('return_timeline', 'true');
-      formData.append('include_frames', 'false');
+      formData.append('feed_id', 'video-upload');
 
       const response = await fetch(`${apiUrl}/detect/video/analyze`, {
         method: 'POST',
@@ -240,12 +264,12 @@ export default function EnhancedVideoAnalyticsDashboard() {
       // Update analytics with video results
       setAnalytics(prev => ({
         ...prev,
-        totalDetections: prev.totalDetections + result.analysis_summary.total_detections,
-        peakOccupancy: Math.max(prev.peakOccupancy, result.analysis_summary.peak_occupancy),
+        totalDetections: prev.totalDetections + result.total_detections,
+        peakOccupancy: Math.max(prev.peakOccupancy, result.peak_occupancy),
         confidenceDistribution: {
-          high: prev.confidenceDistribution.high + result.analysis_summary.confidence_distribution.high,
-          medium: prev.confidenceDistribution.medium + result.analysis_summary.confidence_distribution.medium,
-          low: prev.confidenceDistribution.low + result.analysis_summary.confidence_distribution.low
+          high: prev.confidenceDistribution.high + result.confidence_distribution.high,
+          medium: prev.confidenceDistribution.medium + result.confidence_distribution.medium,
+          low: prev.confidenceDistribution.low + result.confidence_distribution.low
         }
       }));
 
@@ -253,7 +277,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
       setAlerts(prev => [{
         id: Date.now(),
         type: 'success',
-        message: `Video analysis complete! Found ${result.analysis_summary.total_detections} total detections with peak occupancy of ${result.analysis_summary.peak_occupancy} people.`,
+        message: `Video analysis complete! Found ${result.total_detections} total detections with peak occupancy of ${result.peak_occupancy} people.`,
         time: new Date().toLocaleTimeString(),
         severity: 'low'
       }, ...prev.slice(0, 4)]);
@@ -299,7 +323,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
   }, [videoAnalysisResult]);
 
   // Real-time detection function (existing code)
-  const performRealTimeDetection = useCallback(async (feedId) => {
+  const performRealTimeDetection = useCallback(async (feedId: string) => {
     if (!isConnected || !config.realTimeMode) return;
     
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
@@ -313,6 +337,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
       // Convert to blob
@@ -337,7 +363,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
       });
       
       if (response.ok) {
-        const result = await response.json();
+        const result: DetectionResult = await response.json();
         
         // Update feed with real detection results
         setFeeds(prev => ({
@@ -373,7 +399,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
   }, [isConnected, config, apiUrl]);
 
   // Draw real bounding boxes from API response (existing code)
-  const drawRealBoundingBoxes = (feedId, detections) => {
+  const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
     const canvas = canvasRef.current;
@@ -382,6 +408,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
     if (!canvas || !video) return;
     
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
     canvas.width = video.offsetWidth;
     canvas.height = video.offsetHeight;
     
@@ -478,10 +506,12 @@ export default function EnhancedVideoAnalyticsDashboard() {
   };
 
   // Update analytics with real-time data (existing code)
-  const updateRealTimeAnalytics = (result, feedId) => {
+  const updateRealTimeAnalytics = (result: DetectionResult, feedId: string) => {
     setAnalytics(prev => {
       const newDetections = result.people_count || 0;
-      const newConfidence = result.avg_confidence || 0;
+      const newConfidence = result.detections.length > 0 
+        ? result.detections.reduce((sum, d) => sum + d.confidence, 0) / result.detections.length 
+        : 0;
       
       return {
         totalDetections: prev.totalDetections + newDetections,
@@ -501,14 +531,14 @@ export default function EnhancedVideoAnalyticsDashboard() {
         processingStats: {
           avgProcessingTime: result.processing_time_ms || prev.processingStats.avgProcessingTime,
           totalFramesProcessed: prev.processingStats.totalFramesProcessed + 1,
-          fps: result.fps || prev.processingStats.fps
+          fps: result.performance_stats?.fps || prev.processingStats.fps
         }
       };
     });
   };
 
   // Start real-time detection (existing code)
-  const startRealTimeDetection = (feedId) => {
+  const startRealTimeDetection = (feedId: string) => {
     const intervalRef = feedId === 'feed1' ? detectionIntervalRef1 : detectionIntervalRef2;
     
     if (intervalRef.current) {
@@ -521,7 +551,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
   };
 
   // Stop real-time detection (existing code)
-  const stopRealTimeDetection = (feedId) => {
+  const stopRealTimeDetection = (feedId: string) => {
     const intervalRef = feedId === 'feed1' ? detectionIntervalRef1 : detectionIntervalRef2;
     
     if (intervalRef.current) {
@@ -533,7 +563,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d');
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
     }
     
     setFeeds(prev => ({
@@ -547,7 +579,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
   };
 
   // Start camera feed (existing code)
-  const startCameraFeed = async (feedId) => {
+  const startCameraFeed = async (feedId: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
@@ -589,7 +621,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
   };
 
   // Stop camera feed (existing code)
-  const stopCameraFeed = (feedId) => {
+  const stopCameraFeed = (feedId: string) => {
     const streamRef = feedId === 'feed1' ? streamRef1 : streamRef2;
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
     
@@ -628,7 +660,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
         setAlerts(prev => [{
           id: Date.now(),
           type: 'success',
-          message: `Connected to AI Detection API (${data.model_type || 'Unknown Model'})`,
+          message: `Connected to AI Detection API (${data.detector_type || 'Unknown Model'})`,
           time: new Date().toLocaleTimeString(),
           severity: 'low'
         }, ...prev.slice(0, 4)]);
@@ -650,7 +682,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   };
 
-  const toggleCamera = (feedId) => {
+  const toggleCamera = (feedId: string) => {
     if (feeds[feedId].isStreaming) {
       stopCameraFeed(feedId);
     } else {
@@ -1112,7 +1144,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <FileVideo style={{ width: '20px', height: '20px', color: '#8b5cf6' }} />
                                 <div>
-                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6' }}>{videoAnalysisResult.analysis_summary.peak_occupancy}</div>
+                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6' }}>{videoAnalysisResult.peak_occupancy}</div>
                                   <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEAK DETECTED</div>
                                 </div>
                               </div>
@@ -1494,7 +1526,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                               border: '1px solid rgba(139, 92, 246, 0.2)'
                             }}>
                               <div style={{ fontSize: '20px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
-                                {videoAnalysisResult.analysis_summary.total_detections.toLocaleString()}
+                                {videoAnalysisResult.total_detections.toLocaleString()}
                               </div>
                               <div style={{ fontSize: '10px', color: '#94a3b8' }}>VIDEO TOTAL</div>
                             </div>
@@ -1681,7 +1713,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         <div>
                           <p style={{ color: '#6ee7b7', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Total Video Detections</p>
                           <p style={{ fontSize: '32px', fontWeight: '900', color: '#10b981', margin: 0 }}>
-                            {videoAnalysisResult.analysis_summary.total_detections.toLocaleString()}
+                            {videoAnalysisResult.total_detections.toLocaleString()}
                           </p>
                         </div>
                         <Users style={{ width: '40px', height: '40px', color: '#10b981' }} />
@@ -1698,7 +1730,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         <div>
                           <p style={{ color: '#93c5fd', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Peak Occupancy</p>
                           <p style={{ fontSize: '32px', fontWeight: '900', color: '#3b82f6', margin: 0 }}>
-                            {videoAnalysisResult.analysis_summary.peak_occupancy}
+                            {videoAnalysisResult.peak_occupancy}
                           </p>
                         </div>
                         <BarChart3 style={{ width: '40px', height: '40px', color: '#3b82f6' }} />
@@ -1765,23 +1797,23 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                             <span style={{ color: '#94a3b8' }}>Total Frames:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.analysis_summary.total_frames.toLocaleString()}</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.frames_processed.toLocaleString()}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                             <span style={{ color: '#94a3b8' }}>Processed Frames:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.analysis_summary.processed_frames.toLocaleString()}</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.processing_stats.frames_analyzed.toLocaleString()}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                            <span style={{ color: '#94a3b8' }}>Avg Time/Frame:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.processing_stats.avg_time_per_frame.toFixed(2)}ms</span>
+                            <span style={{ color: '#94a3b8' }}>Processing Time:</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{(videoAnalysisResult.processing_stats.total_processing_time / 1000).toFixed(1)}s</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                            <span style={{ color: '#94a3b8' }}>Processing FPS:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.processing_stats.fps_processed.toFixed(1)}</span>
+                            <span style={{ color: '#94a3b8' }}>Video Duration:</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.video_duration.toFixed(1)}s</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
-                            <span style={{ color: '#94a3b8' }}>Average Occupancy:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.analysis_summary.avg_occupancy.toFixed(1)}</span>
+                            <span style={{ color: '#94a3b8' }}>Sample Interval:</span>
+                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.processing_stats.sample_interval}</span>
                           </div>
                         </div>
                       </div>
@@ -1793,7 +1825,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                               <span style={{ color: '#10b981', fontWeight: '600' }}>High (≥70%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.analysis_summary.confidence_distribution.high}</span>
+                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.confidence_distribution.high}</span>
                             </div>
                             <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
                               <div 
@@ -1801,7 +1833,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   background: '#10b981',
                                   height: '100%',
                                   borderRadius: '8px',
-                                  width: `${(videoAnalysisResult.analysis_summary.confidence_distribution.high / videoAnalysisResult.analysis_summary.total_detections) * 100}%`
+                                  width: `${(videoAnalysisResult.confidence_distribution.high / videoAnalysisResult.total_detections) * 100}%`
                                 }}
                               ></div>
                             </div>
@@ -1809,7 +1841,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                               <span style={{ color: '#f59e0b', fontWeight: '600' }}>Medium (40-70%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.analysis_summary.confidence_distribution.medium}</span>
+                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.confidence_distribution.medium}</span>
                             </div>
                             <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
                               <div 
@@ -1817,7 +1849,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   background: '#f59e0b',
                                   height: '100%',
                                   borderRadius: '8px',
-                                  width: `${(videoAnalysisResult.analysis_summary.confidence_distribution.medium / videoAnalysisResult.analysis_summary.total_detections) * 100}%`
+                                  width: `${(videoAnalysisResult.confidence_distribution.medium / videoAnalysisResult.total_detections) * 100}%`
                                 }}
                               ></div>
                             </div>
@@ -1825,7 +1857,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                               <span style={{ color: '#ef4444', fontWeight: '600' }}>Low (&lt;40%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.analysis_summary.confidence_distribution.low}</span>
+                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult.confidence_distribution.low}</span>
                             </div>
                             <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
                               <div 
@@ -1833,7 +1865,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                   background: '#ef4444',
                                   height: '100%',
                                   borderRadius: '8px',
-                                  width: `${(videoAnalysisResult.analysis_summary.confidence_distribution.low / videoAnalysisResult.analysis_summary.total_detections) * 100}%`
+                                  width: `${(videoAnalysisResult.confidence_distribution.low / videoAnalysisResult.total_detections) * 100}%`
                                 }}
                               ></div>
                             </div>
@@ -1843,7 +1875,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     </div>
 
                     {/* Timeline Preview */}
-                    {videoAnalysisResult.timeline_data && videoAnalysisResult.timeline_data.length > 0 && (
+                    {videoAnalysisResult.detection_timeline && videoAnalysisResult.detection_timeline.length > 0 && (
                       <div style={{ marginTop: '32px' }}>
                         <h5 style={{ fontSize: '18px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 24px 0' }}>Detection Timeline (First 10 entries)</h5>
                         <div style={{ overflowX: 'auto' }}>
@@ -1857,10 +1889,10 @@ export default function EnhancedVideoAnalyticsDashboard() {
                               </tr>
                             </thead>
                             <tbody>
-                              {videoAnalysisResult.timeline_data.slice(0, 10).map((entry, index) => (
+                              {videoAnalysisResult.detection_timeline.slice(0, 10).map((entry, index) => (
                                 <tr key={index} style={{ borderBottom: '1px solid #374151' }}>
                                   <td style={{ padding: '12px', color: 'white' }}>{entry.frame_number}</td>
-                                  <td style={{ padding: '12px', color: '#cbd5e1' }}>{entry.timestamp}</td>
+                                  <td style={{ padding: '12px', color: '#cbd5e1' }}>{entry.timestamp.toFixed(1)}s</td>
                                   <td style={{ padding: '12px', color: 'white', fontWeight: '600' }}>{entry.people_count}</td>
                                   <td style={{ padding: '12px' }}>
                                     <span style={{
@@ -1875,9 +1907,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                               ))}
                             </tbody>
                           </table>
-                          {videoAnalysisResult.timeline_data.length > 10 && (
+                          {videoAnalysisResult.detection_timeline.length > 10 && (
                             <p style={{ color: '#94a3b8', fontSize: '12px', margin: '16px 0 0 0' }}>
-                              Showing first 10 of {videoAnalysisResult.timeline_data.length} timeline entries. Download full results for complete data.
+                              Showing first 10 of {videoAnalysisResult.detection_timeline.length} timeline entries. Download full results for complete data.
                             </p>
                           )}
                         </div>
