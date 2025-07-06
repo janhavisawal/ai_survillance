@@ -410,16 +410,25 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    canvas.width = video.offsetWidth;
-    canvas.height = video.offsetHeight;
+    // Set canvas size to match video display size
+    const rect = video.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
     
+    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     if (!config.showBoundingBoxes || !detections.length) return;
     
-    // Calculate scaling factors
-    const scaleX = canvas.width / (video.videoWidth || canvas.width);
-    const scaleY = canvas.height / (video.videoHeight || canvas.height);
+    // Calculate scaling factors from video source to display
+    const scaleX = canvas.width / (video.videoWidth || 640);
+    const scaleY = canvas.height / (video.videoHeight || 480);
+    
+    console.log(`Drawing ${detections.length} detections on ${feedId}`, {
+      canvasSize: { width: canvas.width, height: canvas.height },
+      videoSize: { width: video.videoWidth, height: video.videoHeight },
+      scale: { x: scaleX, y: scaleY }
+    });
     
     detections.forEach((detection, index) => {
       const { bbox, confidence } = detection;
@@ -450,7 +459,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
       ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
       
       // Draw confidence label with background
-      ctx.fillStyle = color;
       ctx.font = 'bold 14px system-ui';
       const text = `Person ${index + 1}: ${(confidence * 100).toFixed(1)}%`;
       const textMetrics = ctx.measureText(text);
@@ -1061,45 +1069,36 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         border: '1px solid rgba(148, 163, 184, 0.1)',
                         aspectRatio: '16/9'
                       }}>
-                        {/* Show uploaded video if available, otherwise camera feed */}
-                        {uploadedFile && activeTab === 'live' ? (
-                          <video
-                            ref={uploadVideoRef}
-                            src={videoPreview}
-                            controls
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <>
-                            <video
-                              ref={videoRef1}
-                              autoPlay
-                              muted
-                              playsInline
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                            <canvas
-                              ref={canvasRef1}
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: '100%',
-                                pointerEvents: 'none'
-                              }}
-                            />
-                          </>
-                        )}
+                        {/* Always show live camera feed */}
+                        <video
+                          ref={videoRef1}
+                          autoPlay
+                          muted
+                          playsInline
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <canvas
+                          ref={canvasRef1}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            pointerEvents: 'none',
+                            zIndex: 10
+                          }}
+                        />
                         
-                        {!feeds.feed1.isStreaming && !uploadedFile && (
+                        {!feeds.feed1.isStreaming && (
                           <div style={{
                             position: 'absolute',
                             inset: 0,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            background: 'linear-gradient(135deg, #0f172a, #1e293b, #0f172a)'
+                            background: 'linear-gradient(135deg, #0f172a, #1e293b, #0f172a)',
+                            zIndex: 5
                           }}>
                             <div style={{ textAlign: 'center' }}>
                               <Camera style={{ width: '80px', height: '80px', color: '#475569', margin: '0 auto 24px' }} />
@@ -1109,8 +1108,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           </div>
                         )}
                         
-                        {feeds.feed1.isStreaming && !uploadedFile && (
-                          <div style={{ position: 'absolute', bottom: '24px', left: '24px' }}>
+                        {feeds.feed1.isStreaming && (
+                          <div style={{ position: 'absolute', bottom: '24px', left: '24px', zIndex: 15 }}>
                             <div style={{
                               background: 'rgba(0, 0, 0, 0.8)',
                               backdropFilter: 'blur(8px)',
@@ -1124,28 +1123,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                 <div>
                                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#60a5fa' }}>{feeds.feed1.currentCount}</div>
                                   <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEOPLE DETECTED</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Video analysis overlay */}
-                        {uploadedFile && videoAnalysisResult && (
-                          <div style={{ position: 'absolute', bottom: '24px', left: '24px' }}>
-                            <div style={{
-                              background: 'rgba(0, 0, 0, 0.8)',
-                              backdropFilter: 'blur(8px)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '16px',
-                              border: '1px solid rgba(148, 163, 184, 0.1)'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <FileVideo style={{ width: '20px', height: '20px', color: '#8b5cf6' }} />
-                                <div>
-                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6' }}>{videoAnalysisResult.peak_occupancy}</div>
-                                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEAK DETECTED</div>
                                 </div>
                               </div>
                             </div>
