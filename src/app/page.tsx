@@ -7,7 +7,7 @@ import {
   BarChart3, Maximize2, RefreshCw, Eye, Target, Bell, 
   Monitor, Cpu, HardDrive, Signal, CheckCircle, XCircle,
   FileVideo, Zap, TrendingUp, Database, RotateCcw, Download,
-  Loader2, AlertCircle
+  Loader2, AlertCircle, LineChart, PieChart, BarChart
 } from 'lucide-react';
 
 // Video Analysis Result Interface
@@ -100,14 +100,62 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   });
   
-  // Video Upload States
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isProcessingVideo, setIsProcessingVideo] = useState(false);
-  const [videoAnalysisResult, setVideoAnalysisResult] = useState<VideoAnalysisResult | null>(null);
-  const [processingProgress, setProcessingProgress] = useState(0);
-  const [currentStatus, setCurrentStatus] = useState<string>('');
-  const [videoPreview, setVideoPreview] = useState<string>('');
-  const [processingError, setProcessingError] = useState<string>('');
+  // Video Upload States for both feeds
+  const [uploadedFiles, setUploadedFiles] = useState<{
+    feed1: File | null;
+    feed2: File | null;
+  }>({
+    feed1: null,
+    feed2: null
+  });
+  
+  const [isProcessingVideo, setIsProcessingVideo] = useState<{
+    feed1: boolean;
+    feed2: boolean;
+  }>({
+    feed1: false,
+    feed2: false
+  });
+  
+  const [videoAnalysisResults, setVideoAnalysisResults] = useState<{
+    feed1: VideoAnalysisResult | null;
+    feed2: VideoAnalysisResult | null;
+  }>({
+    feed1: null,
+    feed2: null
+  });
+  
+  const [processingProgress, setProcessingProgress] = useState<{
+    feed1: number;
+    feed2: number;
+  }>({
+    feed1: 0,
+    feed2: 0
+  });
+  
+  const [currentStatus, setCurrentStatus] = useState<{
+    feed1: string;
+    feed2: string;
+  }>({
+    feed1: '',
+    feed2: ''
+  });
+  
+  const [videoPreview, setVideoPreview] = useState<{
+    feed1: string;
+    feed2: string;
+  }>({
+    feed1: '',
+    feed2: ''
+  });
+  
+  const [processingError, setProcessingError] = useState<{
+    feed1: string;
+    feed2: string;
+  }>({
+    feed1: '',
+    feed2: ''
+  });
   
   const [isConnected, setIsConnected] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -129,9 +177,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
   
   const [alerts, setAlerts] = useState<any[]>([]);
   
-  const [heatmapMode, setHeatmapMode] = useState(false);
-  const [heatmapData, setHeatmapData] = useState<{[key: string]: number}>({});
-  
   const [config, setConfig] = useState({
     confidence: 0.08,
     maxPeople: 15,
@@ -140,13 +185,10 @@ export default function EnhancedVideoAnalyticsDashboard() {
     motionDetection: true,
     showBoundingBoxes: true,
     realTimeMode: true,
-    detectionInterval: 1000, // ms between detections
-    showHeatmap: false
+    detectionInterval: 1000
   });
 
   // Refs for live camera feeds
-  const fileInputRef1 = useRef<HTMLInputElement | null>(null);
-  const fileInputRef2 = useRef<HTMLInputElement | null>(null);
   const videoRef1 = useRef<HTMLVideoElement | null>(null);
   const videoRef2 = useRef<HTMLVideoElement | null>(null);
   const canvasRef1 = useRef<HTMLCanvasElement | null>(null);
@@ -156,10 +198,13 @@ export default function EnhancedVideoAnalyticsDashboard() {
   const streamRef1 = useRef<MediaStream | null>(null);
   const streamRef2 = useRef<MediaStream | null>(null);
 
-  // Refs for video upload
-  const videoUploadInputRef = useRef<HTMLInputElement>(null);
-  const uploadVideoRef = useRef<HTMLVideoElement>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Refs for video upload for both feeds
+  const videoUploadInputRef1 = useRef<HTMLInputElement>(null);
+  const videoUploadInputRef2 = useRef<HTMLInputElement>(null);
+  const uploadVideoRef1 = useRef<HTMLVideoElement>(null);
+  const uploadVideoRef2 = useRef<HTMLVideoElement>(null);
+  const progressIntervalRef1 = useRef<NodeJS.Timeout | null>(null);
+  const progressIntervalRef2 = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -167,34 +212,34 @@ export default function EnhancedVideoAnalyticsDashboard() {
   }, []);
 
   // Video Upload Functions
-  const handleVideoFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>, feedId: 'feed1' | 'feed2') => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
     if (!file.type.startsWith('video/')) {
-      setProcessingError('Please select a valid video file');
+      setProcessingError(prev => ({ ...prev, [feedId]: 'Please select a valid video file' }));
       return;
     }
 
     // Validate file size (e.g., 500MB limit)
     const maxSize = 500 * 1024 * 1024; // 500MB
     if (file.size > maxSize) {
-      setProcessingError('File size too large. Please select a video under 500MB');
+      setProcessingError(prev => ({ ...prev, [feedId]: 'File size too large. Please select a video under 500MB' }));
       return;
     }
 
-    setUploadedFile(file);
-    setProcessingError('');
-    setVideoAnalysisResult(null);
-    setProcessingProgress(0);
+    setUploadedFiles(prev => ({ ...prev, [feedId]: file }));
+    setProcessingError(prev => ({ ...prev, [feedId]: '' }));
+    setVideoAnalysisResults(prev => ({ ...prev, [feedId]: null }));
+    setProcessingProgress(prev => ({ ...prev, [feedId]: 0 }));
 
     // Create video preview
     const videoUrl = URL.createObjectURL(file);
-    setVideoPreview(videoUrl);
+    setVideoPreview(prev => ({ ...prev, [feedId]: videoUrl }));
   }, []);
 
-  const startVideoProgressTracking = useCallback(() => {
+  const startVideoProgressTracking = useCallback((feedId: 'feed1' | 'feed2') => {
     let progress = 0;
     const statuses = [
       'Uploading video...',
@@ -206,46 +251,49 @@ export default function EnhancedVideoAnalyticsDashboard() {
     ];
     let statusIndex = 0;
 
-    progressIntervalRef.current = setInterval(() => {
+    const intervalRef = feedId === 'feed1' ? progressIntervalRef1 : progressIntervalRef2;
+    intervalRef.current = setInterval(() => {
       progress += Math.random() * 15;
       if (progress > 95) progress = 95; // Don't complete until we get real result
       
-      setProcessingProgress(progress);
+      setProcessingProgress(prev => ({ ...prev, [feedId]: progress }));
       
       // Update status every 20% progress
       const newStatusIndex = Math.floor(progress / 16.67);
       if (newStatusIndex !== statusIndex && newStatusIndex < statuses.length) {
         statusIndex = newStatusIndex;
-        setCurrentStatus(statuses[statusIndex]);
+        setCurrentStatus(prev => ({ ...prev, [feedId]: statuses[statusIndex] }));
       }
     }, 1000);
   }, []);
 
-  const stopVideoProgressTracking = useCallback(() => {
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-      progressIntervalRef.current = null;
+  const stopVideoProgressTracking = useCallback((feedId: 'feed1' | 'feed2') => {
+    const intervalRef = feedId === 'feed1' ? progressIntervalRef1 : progressIntervalRef2;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, []);
 
-  const processUploadedVideo = useCallback(async () => {
+  const processUploadedVideo = useCallback(async (feedId: 'feed1' | 'feed2') => {
+    const uploadedFile = uploadedFiles[feedId];
     if (!uploadedFile || !isConnected) {
-      setProcessingError('Please ensure you have a video file and are connected to the API');
+      setProcessingError(prev => ({ ...prev, [feedId]: 'Please ensure you have a video file and are connected to the API' }));
       return;
     }
 
-    setIsProcessingVideo(true);
-    setProcessingError('');
-    setProcessingProgress(0);
-    setCurrentStatus('Preparing video for analysis...');
+    setIsProcessingVideo(prev => ({ ...prev, [feedId]: true }));
+    setProcessingError(prev => ({ ...prev, [feedId]: '' }));
+    setProcessingProgress(prev => ({ ...prev, [feedId]: 0 }));
+    setCurrentStatus(prev => ({ ...prev, [feedId]: 'Preparing video for analysis...' }));
     
-    startVideoProgressTracking();
+    startVideoProgressTracking(feedId);
 
     try {
       const formData = new FormData();
       formData.append('file', uploadedFile);
       formData.append('confidence', config.confidence.toString());
-      formData.append('feed_id', 'video-upload');
+      formData.append('feed_id', feedId);
 
       const response = await fetch(`${apiUrl}/detect/video/analyze`, {
         method: 'POST',
@@ -259,58 +307,18 @@ export default function EnhancedVideoAnalyticsDashboard() {
 
       const result: VideoAnalysisResult = await response.json();
       
-      stopVideoProgressTracking();
-      setProcessingProgress(100);
-      setCurrentStatus('Analysis complete!');
-      setVideoAnalysisResult(result);
-      setIsProcessingVideo(false);
-
-      // Debug: Log the complete analysis result structure
-      console.log('🔍 === COMPLETE ANALYSIS RESULT ===');
-      console.log('📊 Full result object:', result);
-      console.log('⏱️ Detection timeline exists:', !!result.detection_timeline);
-      console.log('📈 Timeline length:', result.detection_timeline?.length || 0);
-      console.log('🎯 First timeline entry:', result.detection_timeline?.[0]);
-      console.log('🎯 Second timeline entry:', result.detection_timeline?.[1]);
-      console.log('🎯 Last timeline entry:', result.detection_timeline?.[result.detection_timeline?.length - 1]);
-      
-      if (result.detection_timeline?.[0]) {
-        const firstEntry = result.detection_timeline[0];
-        console.log('🔍 First entry structure:');
-        console.log('  - Keys:', Object.keys(firstEntry));
-        console.log('  - Has detections property:', 'detections' in firstEntry);
-        console.log('  - Detections value:', firstEntry.detections);
-        console.log('  - Detections type:', typeof firstEntry.detections);
-        console.log('  - Detections length:', firstEntry.detections?.length);
-        
-        if (firstEntry.detections?.[0]) {
-          console.log('🎯 First detection:', firstEntry.detections[0]);
-        }
-      }
-      console.log('🔍 === END ANALYSIS RESULT ===');
+      stopVideoProgressTracking(feedId);
+      setProcessingProgress(prev => ({ ...prev, [feedId]: 100 }));
+      setCurrentStatus(prev => ({ ...prev, [feedId]: 'Analysis complete!' }));
+      setVideoAnalysisResults(prev => ({ ...prev, [feedId]: result }));
+      setIsProcessingVideo(prev => ({ ...prev, [feedId]: false }));
 
       // Draw initial detections on the video
       setTimeout(() => {
-        console.log('Attempting initial detection drawing...');
         if (result.detection_timeline && result.detection_timeline.length > 0) {
-          console.log('Calling drawVideoAnalysisResults with timeline data');
-          drawVideoAnalysisResults(result.detection_timeline);
-        } else {
-          console.log('❌ No detection timeline data available for drawing');
+          drawVideoAnalysisResults(result.detection_timeline, feedId);
         }
       }, 1000);
-
-      // Also try to draw when video is ready
-      setTimeout(() => {
-        const video = uploadVideoRef.current;
-        if (video && video.readyState >= 2) { // HAVE_CURRENT_DATA
-          console.log('Video is ready, forcing detection draw');
-          video.currentTime = 0; // Start at beginning
-          setTimeout(() => {
-            drawVideoAnalysisResults(result.detection_timeline);
-          }, 100);
-        }
-      }, 1500);
 
       // Update analytics with video results
       setAnalytics(prev => ({
@@ -328,52 +336,54 @@ export default function EnhancedVideoAnalyticsDashboard() {
       setAlerts(prev => [{
         id: Date.now(),
         type: 'success',
-        message: `Video analysis complete! Found ${result.total_detections} total detections with peak occupancy of ${result.peak_occupancy} people.`,
+        message: `${feedId.toUpperCase()}: Video analysis complete! Found ${result.total_detections} total detections with peak occupancy of ${result.peak_occupancy} people.`,
         time: new Date().toLocaleTimeString(),
         severity: 'low'
       }, ...(prev || []).slice(0, 4)]);
 
     } catch (error) {
       console.error('Video processing error:', error);
-      stopVideoProgressTracking();
-      setProcessingError(error instanceof Error ? error.message : 'Video processing failed');
-      setIsProcessingVideo(false);
-      setProcessingProgress(0);
-      setCurrentStatus('');
+      stopVideoProgressTracking(feedId);
+      setProcessingError(prev => ({ ...prev, [feedId]: error instanceof Error ? error.message : 'Video processing failed' }));
+      setIsProcessingVideo(prev => ({ ...prev, [feedId]: false }));
+      setProcessingProgress(prev => ({ ...prev, [feedId]: 0 }));
+      setCurrentStatus(prev => ({ ...prev, [feedId]: '' }));
     }
-  }, [uploadedFile, isConnected, apiUrl, config.confidence, startVideoProgressTracking, stopVideoProgressTracking]);
+  }, [uploadedFiles, isConnected, apiUrl, config.confidence, startVideoProgressTracking, stopVideoProgressTracking]);
 
-  const resetVideoUpload = useCallback(() => {
-    setUploadedFile(null);
-    setVideoPreview('');
-    setVideoAnalysisResult(null);
-    setProcessingProgress(0);
-    setCurrentStatus('');
-    setProcessingError('');
-    setIsProcessingVideo(false);
-    stopVideoProgressTracking();
+  const resetVideoUpload = useCallback((feedId: 'feed1' | 'feed2') => {
+    setUploadedFiles(prev => ({ ...prev, [feedId]: null }));
+    setVideoPreview(prev => ({ ...prev, [feedId]: '' }));
+    setVideoAnalysisResults(prev => ({ ...prev, [feedId]: null }));
+    setProcessingProgress(prev => ({ ...prev, [feedId]: 0 }));
+    setCurrentStatus(prev => ({ ...prev, [feedId]: '' }));
+    setProcessingError(prev => ({ ...prev, [feedId]: '' }));
+    setIsProcessingVideo(prev => ({ ...prev, [feedId]: false }));
+    stopVideoProgressTracking(feedId);
     
-    if (videoUploadInputRef.current) {
-      videoUploadInputRef.current.value = '';
+    const inputRef = feedId === 'feed1' ? videoUploadInputRef1 : videoUploadInputRef2;
+    if (inputRef.current) {
+      inputRef.current.value = '';
     }
   }, [stopVideoProgressTracking]);
 
-  const downloadVideoResults = useCallback(() => {
-    if (!videoAnalysisResult) return;
+  const downloadVideoResults = useCallback((feedId: 'feed1' | 'feed2') => {
+    const result = videoAnalysisResults[feedId];
+    if (!result) return;
     
-    const dataStr = JSON.stringify(videoAnalysisResult, null, 2);
+    const dataStr = JSON.stringify(result, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     
     const link = document.createElement('a');
     link.href = url;
-    link.download = `video-analysis-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `${feedId}-analysis-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     
     URL.revokeObjectURL(url);
-  }, [videoAnalysisResult]);
+  }, [videoAnalysisResults]);
 
-  // Real-time detection function (existing code)
+  // Real-time detection function
   const performRealTimeDetection = useCallback(async (feedId: string) => {
     if (!isConnected || !config.realTimeMode) return;
     
@@ -397,10 +407,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
         canvas.toBlob(resolve, 'image/jpeg', 0.8);
       });
       
-      if (!blob) {
-        console.error('Failed to create blob from canvas');
-        return;
-      }
+      if (!blob) return;
       
       // Send to API for detection
       const formData = new FormData();
@@ -427,20 +434,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
           }
         }));
         
-        // Update heat map data for live feeds
-        if (result.detections && result.detections.length > 0) {
-          updateHeatmapData(result.detections, feedId);
-        }
-        
-        // Draw real bounding boxes or heat map
-        if (config.showHeatmap) {
-          const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
-          if (canvasRef.current) {
-            drawHeatmap(canvasRef.current, feedId);
-          }
-        } else {
-          drawRealBoundingBoxes(feedId, result.detections || []);
-        }
+        // Draw bounding boxes
+        drawRealBoundingBoxes(feedId, result.detections || []);
         
         // Update analytics
         updateRealTimeAnalytics(result, feedId);
@@ -461,105 +456,18 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   }, [isConnected, config, apiUrl]);
 
-  // Heat map generation and drawing
-  const updateHeatmapData = useCallback((detections: any[], feedId: string) => {
-    if (!detections.length) return;
+  // Enhanced video analysis drawing
+  const drawVideoAnalysisResults = useCallback((timelineData: any[] = [], feedId: 'feed1' | 'feed2') => {
+    const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
+    const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     
-    setHeatmapData(prev => {
-      const newData = { ...prev };
-      const gridSize = 50; // Size of heat map grid cells
-      
-      detections.forEach(detection => {
-        const [x1, y1, x2, y2] = detection.bbox;
-        const centerX = Math.floor((x1 + x2) / 2 / gridSize) * gridSize;
-        const centerY = Math.floor((y1 + y2) / 2 / gridSize) * gridSize;
-        const key = `${feedId}_${centerX}_${centerY}`;
-        
-        newData[key] = (newData[key] || 0) + 1;
-      });
-      
-      return newData;
-    });
-  }, []);
-
-  const drawHeatmap = useCallback((canvas: HTMLCanvasElement, feedId: string) => {
+    const video = uploadVideoRef.current;
+    const canvas = canvasRef.current;
+    
+    if (!video || !canvas || !timelineData.length) return;
+    
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
-    const gridSize = 50;
-    const maxDensity = Math.max(...Object.values(heatmapData).filter(v => typeof v === 'number')) || 1;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw heat map cells
-    Object.entries(heatmapData).forEach(([key, density]) => {
-      if (!key.startsWith(feedId) || typeof density !== 'number') return;
-      
-      const [, x, y] = key.split('_').map(Number);
-      const intensity = density / maxDensity;
-      
-      // Color gradient: blue (low) -> green (medium) -> red (high)
-      let color;
-      if (intensity < 0.3) {
-        color = `rgba(0, 100, 255, ${intensity * 0.6})`; // Blue
-      } else if (intensity < 0.7) {
-        color = `rgba(0, 255, 100, ${intensity * 0.6})`; // Green
-      } else {
-        color = `rgba(255, 50, 0, ${intensity * 0.8})`; // Red
-      }
-      
-      ctx.fillStyle = color;
-      ctx.fillRect(x, y, gridSize, gridSize);
-    });
-    
-    // Draw legend
-    const legendX = canvas.width - 120;
-    const legendY = 20;
-    
-    // Legend background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(legendX - 10, legendY - 10, 110, 80);
-    
-    // Legend text
-    ctx.fillStyle = 'white';
-    ctx.font = '12px system-ui';
-    ctx.fillText('Activity Density', legendX, legendY + 10);
-    
-    // Legend gradient
-    const legendColors = [
-      { color: 'rgba(0, 100, 255, 0.6)', label: 'Low' },
-      { color: 'rgba(0, 255, 100, 0.6)', label: 'Medium' },
-      { color: 'rgba(255, 50, 0, 0.8)', label: 'High' }
-    ];
-    
-    legendColors.forEach((item, index) => {
-      ctx.fillStyle = item.color;
-      ctx.fillRect(legendX, legendY + 20 + (index * 15), 15, 10);
-      ctx.fillStyle = 'white';
-      ctx.fillText(item.label, legendX + 20, legendY + 30 + (index * 15));
-    });
-  }, [heatmapData]);
-
-  // Enhanced video analysis drawing with heat map support
-  const drawVideoAnalysisResults = useCallback((timelineData: any[] = []) => {
-    const video = uploadVideoRef.current;
-    const canvas = canvasRef1.current;
-    
-    if (!video || !canvas || !timelineData.length) {
-      console.log('Cannot draw detections:', { 
-        hasVideo: !!video, 
-        hasCanvas: !!canvas, 
-        timelineLength: timelineData.length 
-      });
-      return;
-    }
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.log('No canvas context available');
-      return;
-    }
     
     // Set canvas size to match video display
     const videoRect = video.getBoundingClientRect();
@@ -569,22 +477,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Heat map mode
-    if (config.showHeatmap) {
-      // Collect all detections for heat map
-      const allDetections: any[] = [];
-      timelineData.forEach(entry => {
-        if (entry.detections) {
-          allDetections.push(...entry.detections);
-        }
-      });
-      
-      updateHeatmapData(allDetections, 'video');
-      drawHeatmap(canvas, 'video');
-      return;
-    }
-    
-    // Regular detection mode (existing logic)
     const currentTime = video.currentTime;
     
     // Find the closest timeline entry to current video time
@@ -602,7 +494,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    // Draw each detection with thin, transparent style
+    // Draw each detection
     closestEntry.detections.forEach((detection: any, index: number) => {
       const { bbox, confidence } = detection;
       if (!bbox || bbox.length !== 4) return;
@@ -613,7 +505,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
-      // Thin, transparent style
+      // Color based on confidence
       let color = 'rgba(255, 255, 255, 0.8)';
       if (confidence >= 0.7) {
         color = 'rgba(16, 185, 129, 0.7)';
@@ -624,43 +516,35 @@ export default function EnhancedVideoAnalyticsDashboard() {
       }
       
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 2;
       ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
       
-      // Small confidence label for high confidence only
+      // Confidence label
       if (confidence > 0.5) {
-        ctx.font = '10px system-ui';
+        ctx.font = '12px system-ui';
         const text = `${(confidence * 100).toFixed(0)}%`;
         const textMetrics = ctx.measureText(text);
         
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(scaledX1, scaledY1 - 15, textMetrics.width + 6, 12);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(scaledX1, scaledY1 - 20, textMetrics.width + 8, 16);
         
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillText(text, scaledX1 + 3, scaledY1 - 5);
+        ctx.fillStyle = 'white';
+        ctx.fillText(text, scaledX1 + 4, scaledY1 - 8);
       }
     });
     
-    // Header with mode indicator
-    const headerText = config.showHeatmap 
-      ? `HEATMAP: Activity Density` 
-      : `VIDEO: ${closestEntry.detections.length} People at ${currentTime.toFixed(1)}s`;
+    // Header with detection count
+    const headerText = `ANALYZED: ${closestEntry.detections.length} People at ${currentTime.toFixed(1)}s`;
     ctx.font = 'bold 16px system-ui';
     const headerMetrics = ctx.measureText(headerText);
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
-    ctx.fillRect(10, 10, headerMetrics.width + 20, 35);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(10, 10, headerMetrics.width + 20, 30);
     
-    ctx.fillStyle = config.showHeatmap ? '#ff6b35' : '#8b5cf6';
-    ctx.fillText(headerText, 20, 32);
-    
-    // Mode indicator
-    ctx.fillStyle = config.showHeatmap ? 'rgba(255, 107, 53, 0.9)' : 'rgba(139, 92, 246, 0.9)';
-    ctx.fillRect(canvas.width - 100, 10, 90, 25);
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 12px system-ui';
-    ctx.fillText(config.showHeatmap ? '🔥 HEATMAP' : '● ANALYZED', canvas.width - 95, 27);
-  }, [config.showHeatmap, updateHeatmapData, drawHeatmap]);
+    ctx.fillStyle = '#8b5cf6';
+    ctx.fillText(headerText, 20, 30);
+  }, []);
+
   const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
@@ -685,12 +569,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
     // Calculate scaling factors from video source to display
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
-    
-    console.log(`Drawing ${detections.length} detections on ${feedId}`, {
-      canvasSize: { width: canvas.width, height: canvas.height },
-      videoSize: { width: video.videoWidth, height: video.videoHeight },
-      scale: { x: scaleX, y: scaleY }
-    });
     
     detections.forEach((detection, index) => {
       const { bbox, confidence } = detection;
@@ -724,11 +602,10 @@ export default function EnhancedVideoAnalyticsDashboard() {
       ctx.font = 'bold 14px system-ui';
       const text = `Person ${index + 1}: ${(confidence * 100).toFixed(1)}%`;
       const textMetrics = ctx.measureText(text);
-      const textWidth = textMetrics.width;
       
       // Background for text
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(scaledX1, scaledY1 - 28, textWidth + 12, 24);
+      ctx.fillRect(scaledX1, scaledY1 - 28, textMetrics.width + 12, 24);
       
       // Text
       ctx.fillStyle = color;
@@ -740,42 +617,25 @@ export default function EnhancedVideoAnalyticsDashboard() {
       
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+      ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
       ctx.fill();
-      
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 2, 0, 2 * Math.PI);
-      ctx.fill();
-      
-      // Draw person ID
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 12px system-ui';
-      ctx.fillText(`${index + 1}`, centerX - 4, centerY + 4);
     });
     
-    // Header overlay with detection count
+    // Live indicator
     if (detections.length > 0) {
       const headerText = `LIVE: ${detections.length} People Detected`;
       ctx.font = 'bold 16px system-ui';
       const headerMetrics = ctx.measureText(headerText);
       
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
-      ctx.fillRect(10, 10, headerMetrics.width + 20, 35);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(10, 10, headerMetrics.width + 20, 30);
       
-      ctx.fillStyle = feedId === 'feed1' ? '#60a5fa' : '#10b981';
-      ctx.fillText(headerText, 20, 32);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillText(headerText, 20, 30);
     }
-    
-    // Real-time indicator
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
-    ctx.fillRect(canvas.width - 80, 10, 70, 25);
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 12px system-ui';
-    ctx.fillText('● LIVE', canvas.width - 75, 27);
   };
 
-  // Update analytics with real-time data (existing code)
+  // Update analytics with real-time data
   const updateRealTimeAnalytics = (result: DetectionResult, feedId: string) => {
     setAnalytics(prev => {
       const newDetections = result.people_count || 0;
@@ -801,13 +661,13 @@ export default function EnhancedVideoAnalyticsDashboard() {
         processingStats: {
           avgProcessingTime: result.processing_time_ms || prev.processingStats.avgProcessingTime,
           totalFramesProcessed: prev.processingStats.totalFramesProcessed + 1,
-          fps: prev.processingStats.fps // Keep existing FPS since it's not in performance_stats
+          fps: prev.processingStats.fps
         }
       };
     });
   };
 
-  // Start real-time detection (existing code)
+  // Start real-time detection
   const startRealTimeDetection = (feedId: string) => {
     const intervalRef = feedId === 'feed1' ? detectionIntervalRef1 : detectionIntervalRef2;
     
@@ -820,7 +680,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }, config.detectionInterval);
   };
 
-  // Stop real-time detection (existing code)
+  // Stop real-time detection
   const stopRealTimeDetection = (feedId: string) => {
     const intervalRef = feedId === 'feed1' ? detectionIntervalRef1 : detectionIntervalRef2;
     
@@ -848,17 +708,13 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }));
   };
 
-  // Start camera feed with better error handling and video setup
+  // Start camera feed
   const startCameraFeed = async (feedId: string) => {
-    console.log(`Starting camera feed for ${feedId}`);
-    
     try {
-      // Check if getUserMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera not supported in this browser');
       }
 
-      // Request camera permission and stream
       const constraints = {
         video: {
           width: { ideal: 1280, min: 640 },
@@ -869,96 +725,34 @@ export default function EnhancedVideoAnalyticsDashboard() {
         audio: false
       };
 
-      console.log(`Requesting media access for ${feedId} with constraints:`, constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      console.log(`Got media stream for ${feedId}:`, stream);
-      console.log(`Stream tracks:`, stream.getTracks().map(track => ({
-        kind: track.kind,
-        label: track.label,
-        enabled: track.enabled,
-        readyState: track.readyState
-      })));
       
       const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
       const streamRef = feedId === 'feed1' ? streamRef1 : streamRef2;
       
-      if (!videoRef.current) {
-        console.error(`Video element not found for ${feedId}`);
-        return;
-      }
+      if (!videoRef.current) return;
 
-      console.log(`Setting up video element for ${feedId}`);
-      
-      // Set up video element
       const videoElement = videoRef.current;
       videoElement.srcObject = stream;
       streamRef.current = stream;
       
-      // Update state immediately
       setFeeds(prev => ({
         ...prev,
         [feedId]: { ...prev[feedId], isStreaming: true }
       }));
 
-      // Set up event handlers
-      videoElement.onloadedmetadata = () => {
-        console.log(`Video metadata loaded for ${feedId}:`, {
-          videoWidth: videoElement.videoWidth,
-          videoHeight: videoElement.videoHeight,
-          duration: videoElement.duration
-        });
-      };
-
       videoElement.onloadeddata = () => {
-        console.log(`Video data loaded for ${feedId}, attempting to play`);
-        
-        // Try to play the video
         videoElement.play()
           .then(() => {
-            console.log(`Video playing successfully for ${feedId}`);
-            // Start detection after video is playing
             if (config.realTimeMode) {
-              console.log(`Starting real-time detection for ${feedId}`);
               setTimeout(() => startRealTimeDetection(feedId), 1000);
             }
           })
           .catch(e => {
-            console.error(`Video play failed for ${feedId}:`, e);
-            // Try muted autoplay
             videoElement.muted = true;
             return videoElement.play();
-          })
-          .then(() => {
-            console.log(`Video playing (muted) for ${feedId}`);
-          })
-          .catch(e => {
-            console.error(`Video play completely failed for ${feedId}:`, e);
           });
       };
-
-      videoElement.oncanplay = () => {
-        console.log(`Video can play for ${feedId}`);
-      };
-
-      videoElement.onplaying = () => {
-        console.log(`Video is actually playing for ${feedId}`);
-      };
-
-      videoElement.onerror = (e) => {
-        console.error(`Video element error for ${feedId}:`, e);
-      };
-
-      videoElement.onabort = () => {
-        console.warn(`Video loading aborted for ${feedId}`);
-      };
-
-      videoElement.onstalled = () => {
-        console.warn(`Video stalled for ${feedId}`);
-      };
-
-      // Force load the video
-      videoElement.load();
       
     } catch (error) {
       console.error(`Camera access failed for ${feedId}:`, error);
@@ -968,10 +762,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
         errorMessage = 'Camera permission denied. Please allow camera access and try again.';
       } else if (error.name === 'NotFoundError') {
         errorMessage = 'No camera found. Please ensure a camera is connected.';
-      } else if (error.name === 'NotReadableError') {
-        errorMessage = 'Camera is already in use by another application.';
-      } else if (error.name === 'OverconstrainedError') {
-        errorMessage = 'Camera does not meet the required constraints.';
       } else if (error instanceof Error) {
         errorMessage = error.message;
       }
@@ -986,7 +776,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   };
 
-  // Stop camera feed (existing code)
+  // Stop camera feed
   const stopCameraFeed = (feedId: string) => {
     const streamRef = feedId === 'feed1' ? streamRef1 : streamRef2;
     const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
@@ -1021,7 +811,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
         const data = await response.json();
         setApiStatus('connected');
         setIsConnected(true);
-        console.log('API Connected:', data);
         
         setAlerts(prev => [{
           id: Date.now(),
@@ -1036,7 +825,6 @@ export default function EnhancedVideoAnalyticsDashboard() {
     } catch (error) {
       setApiStatus('disconnected');
       setIsConnected(false);
-      console.error('API Connection failed:', error);
       
       setAlerts(prev => [{
         id: Date.now(),
@@ -1048,33 +836,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   };
 
-  const testCamera = async () => {
-    console.log('Testing camera access...');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      console.log('✅ Camera test successful:', stream);
-      stream.getTracks().forEach(track => track.stop()); // Clean up test stream
-      return true;
-    } catch (error) {
-      console.error('❌ Camera test failed:', error);
-      return false;
-    }
-  };
-
   const toggleCamera = (feedId: string) => {
-    console.log(`Toggling camera for ${feedId}, current state:`, feeds[feedId].isStreaming);
-    
     if (feeds[feedId].isStreaming) {
       stopCameraFeed(feedId);
     } else {
-      // Test camera first
-      testCamera().then(canAccess => {
-        if (canAccess) {
-          startCameraFeed(feedId);
-        } else {
-          console.error('Camera test failed, not starting feed');
-        }
-      });
+      startCameraFeed(feedId);
     }
   };
 
@@ -1093,6 +859,17 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   };
 
+  // Create timeline chart data
+  const createTimelineChartData = (result: VideoAnalysisResult | null) => {
+    if (!result?.detection_timeline) return [];
+    
+    return result.detection_timeline.slice(0, 20).map(entry => ({
+      time: `${entry.timestamp.toFixed(1)}s`,
+      people: entry.people_count,
+      confidence: (entry.avg_confidence * 100).toFixed(1)
+    }));
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -1100,12 +877,14 @@ export default function EnhancedVideoAnalyticsDashboard() {
       stopRealTimeDetection('feed2');
       stopCameraFeed('feed1');
       stopCameraFeed('feed2');
-      stopVideoProgressTracking();
-      if (videoPreview) {
-        URL.revokeObjectURL(videoPreview);
-      }
+      [progressIntervalRef1, progressIntervalRef2].forEach(ref => {
+        if (ref.current) clearInterval(ref.current);
+      });
+      Object.values(videoPreview).forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+      });
     };
-  }, [stopVideoProgressTracking, videoPreview]);
+  }, []);
 
   return (
     <div style={{
@@ -1114,1365 +893,1018 @@ export default function EnhancedVideoAnalyticsDashboard() {
       color: 'white',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      <div style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1), transparent 70%)',
-        pointerEvents: 'none'
-      }}></div>
-      
-      <div style={{ position: 'relative', zIndex: 10 }}>
-        <header style={{
-          background: 'rgba(15, 23, 42, 0.8)',
-          backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-        }}>
-          <div style={{ padding: '24px 32px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                <div style={{ position: 'relative' }}>
-                  <div style={{
-                    position: 'absolute',
-                    inset: '-8px',
-                    background: 'linear-gradient(45deg, #3b82f6, #06b6d4)',
-                    borderRadius: '16px',
-                    filter: 'blur(8px)',
-                    opacity: 0.3
-                  }}></div>
-                  <div style={{
-                    position: 'relative',
-                    background: '#1e293b',
-                    padding: '12px',
-                    borderRadius: '16px',
+      {/* Header */}
+      <header style={{
+        background: 'rgba(15, 23, 42, 0.9)',
+        backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+        padding: '20px 30px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Shield style={{ width: '32px', height: '32px', color: '#60a5fa' }} />
+              <h1 style={{
+                fontSize: '24px',
+                fontWeight: '800',
+                background: 'linear-gradient(45deg, #60a5fa, #06b6d4)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                margin: 0
+              }}>
+                AI DETECTION SYSTEM
+              </h1>
+            </div>
+            <span style={{
+              fontSize: '12px',
+              background: config.realTimeMode ? '#10b981' : '#6b7280',
+              padding: '4px 12px',
+              borderRadius: '12px',
+              color: 'white',
+              fontWeight: '600'
+            }}>
+              {config.realTimeMode ? '● LIVE DETECTION' : '○ DETECTION OFF'}
+            </span>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <input
+                type="text"
+                placeholder="Enter AI Detection API URL"
+                value={apiUrl}
+                onChange={(e) => setApiUrl(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #475569',
+                  background: 'rgba(30, 41, 59, 0.5)',
+                  color: 'white',
+                  fontSize: '14px',
+                  width: '280px'
+                }}
+              />
+              <button
+                onClick={testApiConnection}
+                disabled={apiStatus === 'connecting'}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: apiStatus === 'connected' ? '#10b981' : '#3b82f6',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  opacity: apiStatus === 'connecting' ? 0.7 : 1
+                }}
+              >
+                {apiStatus === 'connecting' ? 'Connecting...' : 
+                 apiStatus === 'connected' ? 'Connected' : 'Connect API'}
+              </button>
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 20px',
+              borderRadius: '12px',
+              background: isConnected 
+                ? 'rgba(16, 185, 129, 0.2)' 
+                : 'rgba(239, 68, 68, 0.2)',
+              border: isConnected 
+                ? '1px solid rgba(16, 185, 129, 0.3)' 
+                : '1px solid rgba(239, 68, 68, 0.3)'
+            }}>
+              {isConnected ? <CheckCircle style={{ width: '16px', height: '16px', color: '#10b981' }} /> : <XCircle style={{ width: '16px', height: '16px', color: '#ef4444' }} />}
+              <span style={{ fontSize: '12px', fontWeight: '600', color: isConnected ? '#10b981' : '#ef4444' }}>
+                {isConnected ? 'API CONNECTED' : 'API OFFLINE'}
+              </span>
+            </div>
+            
+            <button
+              onClick={toggleRealTimeDetection}
+              style={{
+                padding: '10px 20px',
+                borderRadius: '10px',
+                border: 'none',
+                background: config.realTimeMode ? '#ef4444' : '#10b981',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {config.realTimeMode ? <Pause style={{ width: '16px', height: '16px' }} /> : <Play style={{ width: '16px', height: '16px' }} />}
+              {config.realTimeMode ? 'Stop Detection' : 'Start Detection'}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div style={{ padding: '30px' }}>
+        {/* Main Content Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 350px', gap: '30px' }}>
+          
+          {/* Feed 1 */}
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '20px',
+            border: '1px solid rgba(148, 163, 184, 0.1)',
+            overflow: 'hidden'
+          }}>
+            <div style={{ padding: '20px', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Camera style={{ width: '20px', height: '20px', color: '#60a5fa' }} />
+                  <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Camera Feed 1</h3>
+                  <span style={{
+                    fontSize: '10px',
+                    background: feeds.feed1.isLiveDetection ? '#10b981' : '#6b7280',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    color: 'white'
+                  }}>
+                    {feeds.feed1.isLiveDetection ? 'DETECTING' : feeds.feed1.isStreaming ? 'STREAMING' : 'OFFLINE'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => toggleCamera('feed1')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: feeds.feed1.isStreaming ? '#ef4444' : '#10b981',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Shield style={{ width: '40px', height: '40px', color: '#60a5fa' }} />
-                    <div style={{
-                      position: 'absolute',
-                      top: '-4px',
-                      right: '-4px',
-                      width: '16px',
-                      height: '16px',
-                      background: isConnected ? '#10b981' : '#ef4444',
-                      borderRadius: '50%',
-                      animation: 'pulse 2s infinite',
-                      boxShadow: `0 0 20px ${isConnected ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'}`
-                    }}></div>
-                  </div>
-                </div>
-                <div>
-                  <h1 style={{
-                    fontSize: '32px',
-                    fontWeight: '900',
-                    background: 'linear-gradient(45deg, #60a5fa, #06b6d4, #3b82f6)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    letterSpacing: '-0.025em',
-                    margin: 0
-                  }}>
-                    AI DETECTION SYSTEM
-                  </h1>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px' }}>
-                    <span style={{
-                      fontSize: '14px',
-                      background: config.realTimeMode && activeTab === 'live' ? 'linear-gradient(45deg, #10b981, #06b6d4)' : 'linear-gradient(45deg, #6b7280, #4b5563)',
-                      padding: '6px 16px',
-                      borderRadius: '20px',
-                      color: 'white',
-                      fontWeight: '600',
-                      boxShadow: config.realTimeMode && activeTab === 'live' ? '0 4px 14px 0 rgba(16, 185, 129, 0.4)' : '0 4px 14px 0 rgba(107, 114, 128, 0.4)'
-                    }}>
-                      {activeTab === 'live' 
-                        ? (config.realTimeMode ? '● LIVE DETECTION' : '○ DETECTION OFF')
-                        : '📹 VIDEO ANALYSIS'
-                      }
-                    </span>
-                    <span style={{
-                      fontSize: '14px',
-                      color: '#94a3b8',
-                      fontFamily: 'monospace'
-                    }}>
-                      {currentTime.toLocaleTimeString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                {/* Tab Switcher */}
-                <div style={{
-                  display: 'flex',
-                  background: 'rgba(30, 41, 59, 0.5)',
-                  borderRadius: '12px',
-                  padding: '4px',
-                  border: '1px solid rgba(148, 163, 184, 0.1)'
-                }}>
-                  <button
-                    onClick={() => setActiveTab('live')}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: activeTab === 'live' ? '#3b82f6' : 'transparent',
-                      color: 'white',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <Monitor style={{ width: '16px', height: '16px' }} />
-                    Live Cameras
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('upload')}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: activeTab === 'upload' ? '#8b5cf6' : 'transparent',
-                      color: 'white',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <FileVideo style={{ width: '16px', height: '16px' }} />
-                    Video Upload
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <input
-                    type="text"
-                    placeholder="Enter your AI Detection API URL"
-                    value={apiUrl}
-                    onChange={(e) => setApiUrl(e.target.value)}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #475569',
-                      background: 'rgba(30, 41, 59, 0.5)',
-                      color: 'white',
-                      fontSize: '14px',
-                      width: '300px'
-                    }}
-                  />
-                  <button
-                    onClick={testApiConnection}
-                    disabled={apiStatus === 'connecting'}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: apiStatus === 'connected' ? '#10b981' : '#3b82f6',
-                      color: 'white',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      opacity: apiStatus === 'connecting' ? 0.7 : 1
-                    }}
-                  >
-                    {apiStatus === 'connecting' ? 'Connecting...' : 
-                     apiStatus === 'connected' ? 'Connected' : 'Connect API'}
-                  </button>
-                </div>
-                
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 24px',
-                  borderRadius: '16px',
-                  background: isConnected 
-                    ? 'rgba(16, 185, 129, 0.2)' 
-                    : 'rgba(239, 68, 68, 0.2)',
-                  border: isConnected 
-                    ? '1px solid rgba(16, 185, 129, 0.3)' 
-                    : '1px solid rgba(239, 68, 68, 0.3)',
-                  color: isConnected ? '#6ee7b7' : '#fca5a5'
-                }}>
-                  {isConnected ? <CheckCircle style={{ width: '20px', height: '20px' }} /> : <XCircle style={{ width: '20px', height: '20px' }} />}
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: '700' }}>
-                      {isConnected ? 'API CONNECTED' : 'API OFFLINE'}
-                    </div>
-                    <div style={{ fontSize: '12px', opacity: 0.8 }}>
-                      {isConnected ? 'Ready for detection' : 'Connect for detection'}
-                    </div>
-                  </div>
-                </div>
+                    gap: '6px'
+                  }}
+                >
+                  {feeds.feed1.isStreaming ? <VideoOff style={{ width: '14px', height: '14px' }} /> : <Video style={{ width: '14px', height: '14px' }} />}
+                  {feeds.feed1.isStreaming ? 'Stop' : 'Start'}
+                </button>
               </div>
             </div>
-          </div>
-        </header>
-
-        <div style={{ padding: '32px' }}>
-          {activeTab === 'live' ? (
-            /* Live Camera Tab Content */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-              {/* Live Camera Feeds Section */}
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.6)',
-                backdropFilter: 'blur(20px)',
-                borderRadius: '24px',
-                border: '1px solid rgba(148, 163, 184, 0.1)',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  padding: '32px',
-                  borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{
-                        padding: '12px',
-                        background: 'linear-gradient(45deg, #3b82f6, #06b6d4)',
-                        borderRadius: '16px'
-                      }}>
-                        <Video style={{ width: '24px', height: '24px', color: 'white' }} />
-                      </div>
-                      <div>
-                        <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: 0 }}>Live Camera Feeds</h2>
-                        <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Real-time AI-powered person detection</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={toggleRealTimeDetection}
-                      style={{
-                        padding: '12px 24px',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: config.realTimeMode ? '#ef4444' : '#10b981',
-                        color: 'white',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      {config.realTimeMode ? <Pause style={{ width: '16px', height: '16px' }} /> : <Play style={{ width: '16px', height: '16px' }} />}
-                      {config.realTimeMode ? 'Stop Detection' : 'Start Detection'}
-                    </button>
-                  </div>
-                </div>
-                
-                <div style={{ padding: '32px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 300px', gap: '32px' }}>
-                    {/* Feed 1 */}
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                          <div style={{ position: 'relative' }}>
-                            <div style={{
-                              padding: '8px',
-                              background: 'rgba(59, 130, 246, 0.2)',
-                              borderRadius: '12px',
-                              border: '1px solid rgba(59, 130, 246, 0.3)'
-                            }}>
-                              <Camera style={{ width: '20px', height: '20px', color: '#60a5fa' }} />
-                            </div>
-                            <div style={{
-                              position: 'absolute',
-                              top: '-4px',
-                              right: '-4px',
-                              width: '12px',
-                              height: '12px',
-                              background: feeds.feed1.isStreaming ? '#10b981' : '#6b7280',
-                              borderRadius: '50%',
-                              animation: feeds.feed1.isStreaming ? 'pulse 1s infinite' : 'none'
-                            }}></div>
-                          </div>
-                          <div>
-                            <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>Camera Feed 1</h3>
-                            <span style={{
-                              fontSize: '12px',
-                              background: feeds.feed1.isLiveDetection ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                              color: feeds.feed1.isLiveDetection ? '#6ee7b7' : '#93c5fd',
-                              padding: '4px 12px',
-                              borderRadius: '20px',
-                              border: feeds.feed1.isLiveDetection ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)'
-                            }}>
-                              {feeds.feed1.isLiveDetection ? '● DETECTING' : feeds.feed1.isStreaming ? 'STREAMING' : 'OFFLINE'}
-                            </span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => toggleCamera('feed1')}
-                          style={{
-                            padding: '12px 20px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            background: feeds.feed1.isStreaming ? '#ef4444' : '#10b981',
-                            color: 'white',
-                            fontSize: '14px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                          }}
-                        >
-                          {feeds.feed1.isStreaming ? (
-                            <>
-                              <VideoOff style={{ width: '16px', height: '16px' }} />
-                              Stop Camera
-                            </>
-                          ) : (
-                            <>
-                              <Video style={{ width: '16px', height: '16px' }} />
-                              Start Camera
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      
-                      <div style={{
-                        position: 'relative',
-                        background: 'black',
-                        borderRadius: '24px',
-                        overflow: 'hidden',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                        border: '1px solid rgba(148, 163, 184, 0.1)',
-                        aspectRatio: '16/9',
-                        minHeight: '350px' // Larger minimum height
-                      }}>
-                        {/* Show uploaded video preview if available */}
-                        {videoPreview ? (
-                          <>
-                            <video
-                              ref={uploadVideoRef}
-                              src={videoPreview}
-                              controls
-                              style={{ 
-                                width: '100%', 
-                                height: '100%', 
-                                objectFit: 'contain',
-                                backgroundColor: '#000'
-                              }}
-                              onLoadedMetadata={() => console.log('Upload video metadata loaded')}
-                              onError={(e) => console.error('Upload video error:', e)}
-                              onTimeUpdate={() => {
-                                // Update detections as video plays
-                                if (videoAnalysisResult?.detection_timeline) {
-                                  drawVideoAnalysisResults(videoAnalysisResult.detection_timeline);
-                                }
-                              }}
-                              onSeeked={() => {
-                                // Update detections when user scrubs
-                                if (videoAnalysisResult?.detection_timeline) {
-                                  drawVideoAnalysisResults(videoAnalysisResult.detection_timeline);
-                                }
-                              }}
-                              onPlay={() => {
-                                // Start updating detections during playback
-                                if (videoAnalysisResult?.detection_timeline) {
-                                  drawVideoAnalysisResults(videoAnalysisResult.detection_timeline);
-                                }
-                              }}
-                            />
-                            {/* Canvas overlay for video analysis results */}
-                            <canvas
-                              ref={canvasRef1}
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: '100%',
-                                pointerEvents: 'none',
-                                zIndex: 10
-                              }}
-                            />
-                          </>
-                        ) : (
-                          /* Live camera feed */
-                          <>
-                            <video
-                              ref={videoRef1}
-                              autoPlay
-                              muted
-                              playsInline
-                              controls={false}
-                              style={{ 
-                                width: '100%', 
-                                height: '100%', 
-                                objectFit: 'cover',
-                                backgroundColor: '#000',
-                                display: 'block'
-                              }}
-                              onLoadStart={() => console.log('Feed1: Video load started')}
-                              onLoadedMetadata={() => console.log('Feed1: Video metadata loaded')}
-                              onLoadedData={() => console.log('Feed1: Video data loaded')}
-                              onCanPlay={() => console.log('Feed1: Video can play')}
-                              onPlay={() => console.log('Feed1: Video started playing')}
-                              onPlaying={() => console.log('Feed1: Video is playing')}
-                              onPause={() => console.log('Feed1: Video paused')}
-                              onError={(e) => console.error('Feed1: Video error:', e)}
-                              onAbort={() => console.warn('Feed1: Video aborted')}
-                              onStalled={() => console.warn('Feed1: Video stalled')}
-                              onSuspend={() => console.warn('Feed1: Video suspended')}
-                              onWaiting={() => console.warn('Feed1: Video waiting')}
-                            />
-                            <canvas
-                              ref={canvasRef1}
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: '100%',
-                                pointerEvents: 'none',
-                                zIndex: 10
-                              }}
-                            />
-                          </>
-                        )}
-                        
-                        {!feeds.feed1.isStreaming && !videoPreview && (
-                          <div style={{
-                            position: 'absolute',
-                            inset: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: 'linear-gradient(135deg, #0f172a, #1e293b, #0f172a)',
-                            zIndex: 5
-                          }}>
-                            <div style={{ textAlign: 'center' }}>
-                              <Camera style={{ width: '80px', height: '80px', color: '#475569', margin: '0 auto 24px' }} />
-                              <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#cbd5e1', margin: '0 0 8px 0' }}>Camera Feed 1</h3>
-                              <p style={{ color: '#64748b', margin: 0 }}>Click "Start Camera" or upload a video to analyze</p>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Video analysis overlay for uploaded videos */}
-                        {videoPreview && videoAnalysisResult && (
-                          <div style={{ position: 'absolute', bottom: '24px', left: '24px', zIndex: 15 }}>
-                            <div style={{
-                              background: 'rgba(0, 0, 0, 0.8)',
-                              backdropFilter: 'blur(8px)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '16px',
-                              border: '1px solid rgba(148, 163, 184, 0.1)'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <FileVideo style={{ width: '20px', height: '20px', color: '#8b5cf6' }} />
-                                <div>
-                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6' }}>{videoAnalysisResult.peak_occupancy}</div>
-                                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEAK DETECTED</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Live detection overlay for camera feeds */}
-                        {feeds.feed1.isStreaming && !videoPreview && (
-                          <div style={{ position: 'absolute', bottom: '24px', left: '24px', zIndex: 15 }}>
-                            <div style={{
-                              background: 'rgba(0, 0, 0, 0.8)',
-                              backdropFilter: 'blur(8px)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '16px',
-                              border: '1px solid rgba(148, 163, 184, 0.1)'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <Users style={{ width: '20px', height: '20px', color: '#60a5fa' }} />
-                                <div>
-                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#60a5fa' }}>{feeds.feed1.currentCount}</div>
-                                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEOPLE DETECTED</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Feed 2 */}
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                          <div style={{ position: 'relative' }}>
-                            <div style={{
-                              padding: '8px',
-                              background: 'rgba(16, 185, 129, 0.2)',
-                              borderRadius: '12px',
-                              border: '1px solid rgba(16, 185, 129, 0.3)'
-                            }}>
-                              <Camera style={{ width: '20px', height: '20px', color: '#10b981' }} />
-                            </div>
-                            <div style={{
-                              position: 'absolute',
-                              top: '-4px',
-                              right: '-4px',
-                              width: '12px',
-                              height: '12px',
-                              background: feeds.feed2.isStreaming ? '#10b981' : '#6b7280',
-                              borderRadius: '50%',
-                              animation: feeds.feed2.isStreaming ? 'pulse 1s infinite' : 'none'
-                            }}></div>
-                          </div>
-                          <div>
-                            <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>Camera Feed 2</h3>
-                            <span style={{
-                              fontSize: '12px',
-                              background: feeds.feed2.isLiveDetection ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                              color: feeds.feed2.isLiveDetection ? '#6ee7b7' : '#6ee7b7',
-                              padding: '4px 12px',
-                              borderRadius: '20px',
-                              border: '1px solid rgba(16, 185, 129, 0.3)'
-                            }}>
-                              {feeds.feed2.isLiveDetection ? '● DETECTING' : feeds.feed2.isStreaming ? 'STREAMING' : 'OFFLINE'}
-                            </span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => toggleCamera('feed2')}
-                          style={{
-                            padding: '12px 20px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            background: feeds.feed2.isStreaming ? '#ef4444' : '#10b981',
-                            color: 'white',
-                            fontSize: '14px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                          }}
-                        >
-                          {feeds.feed2.isStreaming ? (
-                            <>
-                              <VideoOff style={{ width: '16px', height: '16px' }} />
-                              Stop Camera
-                            </>
-                          ) : (
-                            <>
-                              <Video style={{ width: '16px', height: '16px' }} />
-                              Start Camera
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      
-                      <div style={{
-                        position: 'relative',
-                        background: 'black',
-                        borderRadius: '24px',
-                        overflow: 'hidden',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                        border: '1px solid rgba(148, 163, 184, 0.1)',
-                        aspectRatio: '16/9',
-                        minHeight: '350px' // Larger minimum height
-                      }}>
-                        <video
-                          ref={videoRef2}
-                          autoPlay
-                          muted
-                          playsInline
-                          controls={false}
-                          style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'cover',
-                            backgroundColor: '#000',
-                            display: 'block'
-                          }}
-                          onLoadStart={() => console.log('Feed2: Video load started')}
-                          onLoadedMetadata={() => console.log('Feed2: Video metadata loaded')}
-                          onLoadedData={() => console.log('Feed2: Video data loaded')}
-                          onCanPlay={() => console.log('Feed2: Video can play')}
-                          onPlay={() => console.log('Feed2: Video started playing')}
-                          onPlaying={() => console.log('Feed2: Video is playing')}
-                          onPause={() => console.log('Feed2: Video paused')}
-                          onError={(e) => console.error('Feed2: Video error:', e)}
-                          onAbort={() => console.warn('Feed2: Video aborted')}
-                          onStalled={() => console.warn('Feed2: Video stalled')}
-                          onSuspend={() => console.warn('Feed2: Video suspended')}
-                          onWaiting={() => console.warn('Feed2: Video waiting')}
-                        />
-                        <canvas
-                          ref={canvasRef2}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            pointerEvents: 'none'
-                          }}
-                        />
-                        
-                        {!feeds.feed2.isStreaming && (
-                          <div style={{
-                            position: 'absolute',
-                            inset: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: 'linear-gradient(135deg, #0f172a, #1e293b, #0f172a)'
-                          }}>
-                            <div style={{ textAlign: 'center' }}>
-                              <Camera style={{ width: '80px', height: '80px', color: '#475569', margin: '0 auto 24px' }} />
-                              <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#cbd5e1', margin: '0 0 8px 0' }}>Camera Feed 2</h3>
-                              <p style={{ color: '#64748b', margin: 0 }}>Click "Start Camera" to begin detection</p>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {feeds.feed2.isStreaming && (
-                          <div style={{ position: 'absolute', bottom: '24px', left: '24px' }}>
-                            <div style={{
-                              background: 'rgba(0, 0, 0, 0.8)',
-                              backdropFilter: 'blur(8px)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '16px',
-                              border: '1px solid rgba(148, 163, 184, 0.1)'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <Users style={{ width: '20px', height: '20px', color: '#10b981' }} />
-                                <div>
-                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#10b981' }}>{feeds.feed2.currentCount}</div>
-                                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEOPLE DETECTED</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right Sidebar - Upload and Controls */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                      {/* Video Upload Section */}
-                      <div style={{
-                        background: 'rgba(15, 23, 42, 0.6)',
-                        backdropFilter: 'blur(20px)',
-                        borderRadius: '20px',
-                        border: '1px solid rgba(148, 163, 184, 0.1)',
-                        padding: '24px',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                          <div style={{
-                            padding: '8px',
-                            background: 'linear-gradient(45deg, #8b5cf6, #a855f7)',
-                            borderRadius: '12px'
-                          }}>
-                            <FileVideo style={{ width: '20px', height: '20px', color: 'white' }} />
-                          </div>
-                          <div>
-                            <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'white', margin: 0 }}>Video Upload</h3>
-                            <p style={{ color: '#94a3b8', margin: '2px 0 0 0', fontSize: '12px' }}>Analyze video files</p>
-                          </div>
-                        </div>
-
-                        {!uploadedFile ? (
-                          <div style={{
-                            border: '2px dashed #6b7280',
-                            borderRadius: '12px',
-                            padding: '20px',
-                            textAlign: 'center'
-                          }}>
-                            <Upload style={{ width: '32px', height: '32px', color: '#6b7280', margin: '0 auto 12px' }} />
-                            <p style={{ color: '#94a3b8', margin: '0 0 16px 0', fontSize: '12px' }}>
-                              Select video for AI analysis
-                            </p>
-                            <button
-                              onClick={() => videoUploadInputRef.current?.click()}
-                              disabled={!isConnected}
-                              style={{
-                                padding: '8px 16px',
-                                borderRadius: '8px',
-                                border: 'none',
-                                background: isConnected ? '#8b5cf6' : '#6b7280',
-                                color: 'white',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                                cursor: isConnected ? 'pointer' : 'not-allowed',
-                                width: '100%'
-                              }}
-                            >
-                              Choose File
-                            </button>
-                            {!isConnected && (
-                              <p style={{ color: '#ef4444', fontSize: '10px', margin: '8px 0 0 0' }}>
-                                Connect API first
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <div style={{
-                              background: 'rgba(30, 41, 59, 0.5)',
-                              borderRadius: '8px',
-                              padding: '12px',
-                              border: '1px solid rgba(148, 163, 184, 0.1)'
-                            }}>
-                              <div style={{ fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>File:</div>
-                              <div style={{ fontSize: '11px', color: 'white', fontWeight: '600' }}>{uploadedFile.name}</div>
-                              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
-                                {(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB
-                              </div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                onClick={processUploadedVideo}
-                                disabled={isProcessingVideo || !isConnected}
-                                style={{
-                                  flex: 1,
-                                  padding: '8px 12px',
-                                  borderRadius: '8px',
-                                  border: 'none',
-                                  background: isProcessingVideo || !isConnected ? '#6b7280' : '#8b5cf6',
-                                  color: 'white',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  cursor: isProcessingVideo || !isConnected ? 'not-allowed' : 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '4px'
-                                }}
-                              >
-                                {isProcessingVideo ? (
-                                  <>
-                                    <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />
-                                    Analyzing
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play style={{ width: '12px', height: '12px' }} />
-                                    Analyze
-                                  </>
-                                )}
-                              </button>
-                              <button
-                                onClick={resetVideoUpload}
-                                style={{
-                                  padding: '8px',
-                                  borderRadius: '8px',
-                                  border: 'none',
-                                  background: '#6b7280',
-                                  color: 'white',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <RotateCcw style={{ width: '12px', height: '12px' }} />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        <input
-                          ref={videoUploadInputRef}
-                          type="file"
-                          accept="video/*"
-                          onChange={handleVideoFileSelect}
-                          style={{ display: 'none' }}
-                        />
-                      </div>
-
-                      {/* Processing Progress */}
-                      {isProcessingVideo && (
-                        <div style={{
-                          background: 'rgba(15, 23, 42, 0.6)',
-                          backdropFilter: 'blur(20px)',
-                          borderRadius: '20px',
-                          border: '1px solid rgba(148, 163, 184, 0.1)',
-                          padding: '20px',
-                          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                            <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'white', margin: 0 }}>Processing</h4>
-                            <span style={{ color: '#8b5cf6', fontSize: '14px', fontWeight: '700' }}>{Math.round(processingProgress)}%</span>
-                          </div>
-                          
-                          <div style={{
-                            width: '100%',
-                            background: 'rgba(30, 41, 59, 0.5)',
-                            borderRadius: '8px',
-                            height: '6px',
-                            marginBottom: '12px',
-                            overflow: 'hidden'
-                          }}>
-                            <div 
-                              style={{
-                                background: 'linear-gradient(90deg, #8b5cf6, #06b6d4)',
-                                height: '100%',
-                                borderRadius: '8px',
-                                transition: 'width 0.5s ease',
-                                width: `${processingProgress}%`
-                              }}
-                            ></div>
-                          </div>
-                          
-                          {currentStatus && (
-                            <div style={{ fontSize: '11px', color: '#cbd5e1' }}>
-                              {currentStatus}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Error Display */}
-                      {processingError && (
-                        <div style={{
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          borderRadius: '12px',
-                          padding: '16px'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                            <AlertCircle style={{ width: '16px', height: '16px', color: '#ef4444' }} />
-                            <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '12px' }}>Error</span>
-                          </div>
-                          <p style={{ color: '#fca5a5', margin: 0, fontSize: '11px' }}>{processingError}</p>
-                        </div>
-                      )}
-
-                      {/* Quick Stats */}
-                      <div style={{
-                        background: 'rgba(15, 23, 42, 0.6)',
-                        backdropFilter: 'blur(20px)',
-                        borderRadius: '20px',
-                        border: '1px solid rgba(148, 163, 184, 0.1)',
-                        padding: '20px',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-                      }}>
-                        <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'white', margin: '0 0 16px 0' }}>Quick Stats</h4>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          <div style={{
-                            background: 'rgba(30, 41, 59, 0.5)',
-                            borderRadius: '8px',
-                            padding: '12px',
-                            border: '1px solid rgba(59, 130, 246, 0.2)'
-                          }}>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: '#60a5fa', marginBottom: '4px' }}>
-                              {feeds.feed1.currentCount + feeds.feed2.currentCount}
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8' }}>CURRENT TOTAL</div>
-                          </div>
-                          
-                          <div style={{
-                            background: 'rgba(30, 41, 59, 0.5)',
-                            borderRadius: '8px',
-                            padding: '12px',
-                            border: '1px solid rgba(16, 185, 129, 0.2)'
-                          }}>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981', marginBottom: '4px' }}>
-                              {analytics.peakOccupancy}
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8' }}>PEAK COUNT</div>
-                          </div>
-
-                          {videoAnalysisResult && (
-                            <div style={{
-                              background: 'rgba(30, 41, 59, 0.5)',
-                              borderRadius: '8px',
-                              padding: '12px',
-                              border: '1px solid rgba(139, 92, 246, 0.2)'
-                            }}>
-                              <div style={{ fontSize: '20px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
-                                {videoAnalysisResult.total_detections?.toLocaleString() || '0'}
-                              </div>
-                              <div style={{ fontSize: '10px', color: '#94a3b8' }}>VIDEO TOTAL</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            
+            <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000' }}>
+              {/* Live camera or uploaded video */}
+              {videoPreview.feed1 ? (
+                <video
+                  ref={uploadVideoRef1}
+                  src={videoPreview.feed1}
+                  controls
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  onTimeUpdate={() => {
+                    if (videoAnalysisResults.feed1?.detection_timeline) {
+                      drawVideoAnalysisResults(videoAnalysisResults.feed1.detection_timeline, 'feed1');
+                    }
+                  }}
+                  onSeeked={() => {
+                    if (videoAnalysisResults.feed1?.detection_timeline) {
+                      drawVideoAnalysisResults(videoAnalysisResults.feed1.detection_timeline, 'feed1');
+                    }
+                  }}
+                />
+              ) : (
+                <video
+                  ref={videoRef1}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              )}
               
-              {/* Analytics Section for Live View - moved below cameras */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-                {/* Configuration */}
+              <canvas
+                ref={canvasRef1}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none'
+                }}
+              />
+              
+              {!feeds.feed1.isStreaming && !videoPreview.feed1 && (
                 <div style={{
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  backdropFilter: 'blur(20px)',
-                  borderRadius: '24px',
-                  border: '1px solid rgba(148, 163, 184, 0.1)',
-                  padding: '32px',
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #0f172a, #1e293b)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
-                    <div style={{
-                      padding: '12px',
-                      background: 'linear-gradient(45deg, #a855f7, #ec4899)',
-                      borderRadius: '16px'
-                    }}>
-                      <Settings style={{ width: '24px', height: '24px', color: 'white' }} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>Detection Settings</h3>
-                      <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Configure AI parameters</p>
-                    </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1' }}>Detection Confidence</label>
-                        <span style={{ color: '#06b6d4', fontSize: '16px', fontWeight: '700' }}>{(config.confidence * 100).toFixed(0)}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.01"
-                        max="0.95"
-                        step="0.01"
-                        value={config.confidence}
-                        onChange={(e) => setConfig({...config, confidence: parseFloat(e.target.value)})}
-                        style={{
-                          width: '100%',
-                          height: '6px',
-                          background: '#374151',
-                          borderRadius: '6px',
-                          appearance: 'none',
-                          cursor: 'pointer',
-                          accentColor: '#06b6d4'
-                        }}
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#64748b', marginTop: '8px' }}>
-                        <span>Ultra-Sensitive (1%)</span>
-                        <span>High Precision (95%)</span>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#cbd5e1', marginBottom: '12px' }}>Detection Interval (ms)</label>
-                      <input
-                        type="number"
-                        min="100"
-                        max="5000"
-                        step="100"
-                        value={config.detectionInterval}
-                        onChange={(e) => setConfig({...config, detectionInterval: parseInt(e.target.value)})}
-                        style={{
-                          width: '100%',
-                          background: 'rgba(30, 41, 59, 0.5)',
-                          border: '1px solid #475569',
-                          borderRadius: '8px',
-                          padding: '10px 12px',
-                          color: 'white',
-                          fontSize: '14px',
-                          fontWeight: '600'
-                        }}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', fontWeight: '600', color: '#cbd5e1', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={config.showBoundingBoxes}
-                          onChange={(e) => setConfig({...config, showBoundingBoxes: e.target.checked})}
-                          style={{ accentColor: '#06b6d4' }}
-                        />
-                        Show Bounding Boxes
-                      </label>
-                    </div>
-                    
-                    <div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', fontWeight: '600', color: '#cbd5e1', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={config.showHeatmap}
-                          onChange={(e) => {
-                            setConfig({...config, showHeatmap: e.target.checked});
-                            // Redraw with new mode if video analysis exists
-                            if (videoAnalysisResult?.detection_timeline && e.target.checked !== config.showHeatmap) {
-                              setTimeout(() => drawVideoAnalysisResults(videoAnalysisResult.detection_timeline), 100);
-                            }
-                          }}
-                          style={{ accentColor: '#ff6b35' }}
-                        />
-                        🔥 Show Activity Heatmap
-                      </label>
-                    </div>
-                    
-                    <div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', fontWeight: '600', color: '#cbd5e1', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={config.alertEnabled}
-                          onChange={(e) => setConfig({...config, alertEnabled: e.target.checked})}
-                          style={{ accentColor: '#06b6d4' }}
-                        />
-                        Enable Alerts
-                      </label>
-                    </div>
-                    
-                    {/* Heat map controls */}
-                    <div style={{ 
-                      padding: '16px', 
-                      background: 'rgba(30, 41, 59, 0.5)', 
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255, 107, 53, 0.3)'
-                    }}>
-                      <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#ff6b35', margin: '0 0 12px 0' }}>🔥 Heat Map Options</h4>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <button
-                          onClick={() => {
-                            setHeatmapData({});
-                            console.log('Heat map data cleared');
-                          }}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            border: 'none',
-                            background: '#6b7280',
-                            color: 'white',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Clear Heat Map Data
-                        </button>
-                        
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                          Heat map shows activity density over time. Red areas = high activity.
-                        </div>
-                      </div>
-                    </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <Camera style={{ width: '48px', height: '48px', color: '#475569', margin: '0 auto 16px' }} />
+                    <p style={{ color: '#64748b', margin: 0 }}>Start camera or upload video</p>
                   </div>
                 </div>
-                
-                {/* System Status & Alerts */}
-                <div style={{
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  backdropFilter: 'blur(20px)',
-                  borderRadius: '24px',
-                  border: '1px solid rgba(148, 163, 184, 0.1)',
-                  padding: '32px',
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
-                    <div style={{
-                      padding: '12px',
-                      background: 'linear-gradient(45deg, #ea580c, #dc2626)',
-                      borderRadius: '16px'
-                    }}>
-                      <AlertTriangle style={{ width: '24px', height: '24px', color: 'white' }} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>System Status</h3>
-                    </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {alerts && alerts.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '32px' }}>
-                        <CheckCircle style={{ width: '48px', height: '48px', color: '#10b981', margin: '0 auto 16px' }} />
-                        <p style={{ color: '#94a3b8', fontSize: '14px', margin: 0 }}>All systems operational</p>
-                      </div>
-                    ) : (
-                      (alerts || []).map((alert) => (
-                        <div
-                          key={alert.id}
-                          style={{
-                            padding: '12px',
-                            borderRadius: '8px',
-                            borderLeft: `3px solid ${
-                              alert.severity === 'high' 
-                                ? '#ef4444' 
-                                : alert.severity === 'medium'
-                                ? '#fbbf24'
-                                : '#10b981'
-                            }`,
-                            background: 'rgba(30, 41, 59, 0.3)',
-                            border: '1px solid rgba(71, 85, 105, 0.3)'
-                          }}
-                        >
-                          <div style={{ fontSize: '12px', fontWeight: '600', color: 'white', marginBottom: '4px' }}>{alert.message}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#94a3b8' }}>
-                            <Clock style={{ width: '10px', height: '10px' }} />
-                            <span>{alert.time}</span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Video Analysis Results Section */}
-              {videoAnalysisResult && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                  {/* Summary Cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-                    <div style={{
-                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1))',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      borderRadius: '20px',
-                      padding: '32px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div>
-                          <p style={{ color: '#6ee7b7', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Total Video Detections</p>
-                          <p style={{ fontSize: '32px', fontWeight: '900', color: '#10b981', margin: 0 }}>
-                            {videoAnalysisResult?.total_detections?.toLocaleString() || '0'}
-                          </p>
-                        </div>
-                        <Users style={{ width: '40px', height: '40px', color: '#10b981' }} />
-                      </div>
-                    </div>
-                    
-                    <div style={{
-                      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1))',
-                      border: '1px solid rgba(59, 130, 246, 0.3)',
-                      borderRadius: '20px',
-                      padding: '32px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div>
-                          <p style={{ color: '#93c5fd', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Peak Occupancy</p>
-                          <p style={{ fontSize: '32px', fontWeight: '900', color: '#3b82f6', margin: 0 }}>
-                            {videoAnalysisResult?.peak_occupancy || '0'}
-                          </p>
-                        </div>
-                        <BarChart3 style={{ width: '40px', height: '40px', color: '#3b82f6' }} />
-                      </div>
-                    </div>
-                    
-                    <div style={{
-                      background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.1))',
-                      border: '1px solid rgba(139, 92, 246, 0.3)',
-                      borderRadius: '20px',
-                      padding: '32px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div>
-                          <p style={{ color: '#c4b5fd', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Processing Time</p>
-                          <p style={{ fontSize: '32px', fontWeight: '900', color: '#8b5cf6', margin: 0 }}>
-                            {videoAnalysisResult?.processing_stats?.total_processing_time 
-                              ? (videoAnalysisResult.processing_stats.total_processing_time / 1000).toFixed(1) + 's'
-                              : '0s'
-                            }
-                          </p>
-                        </div>
-                        <Clock style={{ width: '40px', height: '40px', color: '#8b5cf6' }} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Detailed Results */}
+              )}
+              
+              {/* Detection count overlay */}
+              {(feeds.feed1.isStreaming || videoPreview.feed1) && (
+                <div style={{ position: 'absolute', bottom: '16px', left: '16px' }}>
                   <div style={{
-                    background: 'rgba(15, 23, 42, 0.6)',
-                    backdropFilter: 'blur(20px)',
-                    borderRadius: '24px',
-                    border: '1px solid rgba(148, 163, 184, 0.1)',
-                    padding: '32px',
-                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                    background: 'rgba(0, 0, 0, 0.8)',
+                    color: 'white',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
-                      <h4 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: 0 }}>Video Analysis Results</h4>
-                      <button
-                        onClick={downloadVideoResults}
-                        style={{
-                          padding: '12px 24px',
-                          borderRadius: '12px',
-                          border: 'none',
-                          background: '#3b82f6',
-                          color: 'white',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          transition: 'background 0.2s'
-                        }}
-                        onMouseOver={(e) => e.currentTarget.style.background = '#2563eb'}
-                        onMouseOut={(e) => e.currentTarget.style.background = '#3b82f6'}
-                      >
-                        <Download style={{ width: '16px', height: '16px' }} />
-                        Download Results
-                      </button>
-                    </div>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-                      {/* Processing Stats */}
-                      <div>
-                        <h5 style={{ fontSize: '18px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 24px 0' }}>Processing Statistics</h5>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                            <span style={{ color: '#94a3b8' }}>Total Frames:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.frames_processed?.toLocaleString() || '0'}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                            <span style={{ color: '#94a3b8' }}>Processed Frames:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.processing_stats?.frames_analyzed?.toLocaleString() || '0'}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                            <span style={{ color: '#94a3b8' }}>Processing Time:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>
-                              {videoAnalysisResult?.processing_stats?.total_processing_time 
-                                ? (videoAnalysisResult.processing_stats.total_processing_time / 1000).toFixed(1) + 's'
-                                : '0s'
-                              }
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                            <span style={{ color: '#94a3b8' }}>Video Duration:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.video_duration?.toFixed(1) || '0'}s</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
-                            <span style={{ color: '#94a3b8' }}>Sample Interval:</span>
-                            <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.processing_stats?.sample_interval || '0'}</span>
-                          </div>
-                        </div>
+                    <Users style={{ width: '16px', height: '16px', color: '#60a5fa' }} />
+                    <div>
+                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#60a5fa' }}>
+                        {videoAnalysisResults.feed1?.peak_occupancy || feeds.feed1.currentCount}
                       </div>
-
-                      {/* Confidence Distribution */}
-                      <div>
-                        <h5 style={{ fontSize: '18px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 24px 0' }}>Confidence Distribution</h5>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                              <span style={{ color: '#10b981', fontWeight: '600' }}>High (≥70%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.confidence_distribution?.high || 0}</span>
-                            </div>
-                            <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
-                              <div 
-                                style={{
-                                  background: '#10b981',
-                                  height: '100%',
-                                  borderRadius: '8px',
-                                  width: `${videoAnalysisResult?.confidence_distribution?.high && videoAnalysisResult?.total_detections 
-                                    ? (videoAnalysisResult.confidence_distribution.high / videoAnalysisResult.total_detections) * 100 
-                                    : 0}%`
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                              <span style={{ color: '#f59e0b', fontWeight: '600' }}>Medium (40-70%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.confidence_distribution?.medium || 0}</span>
-                            </div>
-                            <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
-                              <div 
-                                style={{
-                                  background: '#f59e0b',
-                                  height: '100%',
-                                  borderRadius: '8px',
-                                  width: `${videoAnalysisResult?.confidence_distribution?.medium && videoAnalysisResult?.total_detections 
-                                    ? (videoAnalysisResult.confidence_distribution.medium / videoAnalysisResult.total_detections) * 100 
-                                    : 0}%`
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                              <span style={{ color: '#ef4444', fontWeight: '600' }}>Low (&lt;40%)</span>
-                              <span style={{ color: 'white', fontWeight: '600' }}>{videoAnalysisResult?.confidence_distribution?.low || 0}</span>
-                            </div>
-                            <div style={{ width: '100%', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', height: '8px' }}>
-                              <div 
-                                style={{
-                                  background: '#ef4444',
-                                  height: '100%',
-                                  borderRadius: '8px',
-                                  width: `${videoAnalysisResult?.confidence_distribution?.low && videoAnalysisResult?.total_detections 
-                                    ? (videoAnalysisResult.confidence_distribution.low / videoAnalysisResult.total_detections) * 100 
-                                    : 0}%`
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
+                      <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                        {videoPreview.feed1 ? 'PEAK' : 'LIVE'}
                       </div>
                     </div>
-
-                    {/* Timeline Preview */}
-                    {videoAnalysisResult?.detection_timeline && videoAnalysisResult.detection_timeline.length > 0 && (
-                      <div style={{ marginTop: '32px' }}>
-                        <h5 style={{ fontSize: '18px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 24px 0' }}>Detection Timeline (First 10 entries)</h5>
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ width: '100%', fontSize: '14px' }}>
-                            <thead>
-                              <tr style={{ borderBottom: '1px solid #374151' }}>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8' }}>Frame</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8' }}>Timestamp</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8' }}>People Count</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8' }}>Avg Confidence</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {videoAnalysisResult?.detection_timeline?.slice(0, 10).map((entry, index) => (
-                                <tr key={index} style={{ borderBottom: '1px solid #374151' }}>
-                                  <td style={{ padding: '12px', color: 'white', fontWeight: '600' }}>{entry?.frame_number || 0}</td>
-                                  <td style={{ padding: '12px', color: '#cbd5e1' }}>{entry?.timestamp?.toFixed(1) || '0'}s</td>
-                                  <td style={{ padding: '12px', color: 'white', fontWeight: '600' }}>{entry?.people_count || 0}</td>
-                                  <td style={{ padding: '12px' }}>
-                                    <span style={{
-                                      fontWeight: '600',
-                                      color: (entry?.avg_confidence || 0) >= 0.7 ? '#10b981' :
-                                            (entry?.avg_confidence || 0) >= 0.4 ? '#f59e0b' : '#ef4444'
-                                    }}>
-                                      {((entry?.avg_confidence || 0) * 100).toFixed(1)}%
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          {videoAnalysisResult?.detection_timeline && videoAnalysisResult.detection_timeline.length > 10 && (
-                            <p style={{ color: '#94a3b8', fontSize: '12px', margin: '16px 0 0 0' }}>
-                              Showing first 10 of {videoAnalysisResult.detection_timeline.length} timeline entries. Download full results for complete data.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
             </div>
-          ) : (
-            /* Video Upload Tab Content - Simplified since upload is now in sidebar */
-            <div style={{ 
-              padding: '100px',
-              textAlign: 'center',
-              color: '#94a3b8'
-            }}>
-              <FileVideo style={{ width: '64px', height: '64px', color: '#6b7280', margin: '0 auto 24px' }} />
-              <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#cbd5e1', margin: '0 0 12px 0' }}>Video upload functionality</h3>
-              <p style={{ margin: 0, fontSize: '16px' }}>
-                Video upload is now available in the sidebar on the Live Cameras tab
-              </p>
+            
+            {/* Video Upload Section for Feed 1 */}
+            <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <FileVideo style={{ width: '16px', height: '16px', color: '#8b5cf6' }} />
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: 0 }}>Video Upload</h4>
+              </div>
+              
+              {!uploadedFiles.feed1 ? (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => videoUploadInputRef1.current?.click()}
+                    disabled={!isConnected}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: isConnected ? '#8b5cf6' : '#6b7280',
+                      color: 'white',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: isConnected ? 'pointer' : 'not-allowed',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Upload style={{ width: '14px', height: '14px' }} />
+                    Choose Video
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#cbd5e1' }}>{uploadedFiles.feed1.name}</div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => processUploadedVideo('feed1')}
+                      disabled={isProcessingVideo.feed1 || !isConnected}
+                      style={{
+                        flex: 1,
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: isProcessingVideo.feed1 || !isConnected ? '#6b7280' : '#8b5cf6',
+                        color: 'white',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        cursor: isProcessingVideo.feed1 || !isConnected ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {isProcessingVideo.feed1 ? (
+                        <>
+                          <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />
+                          {Math.round(processingProgress.feed1)}%
+                        </>
+                      ) : (
+                        <>
+                          <Play style={{ width: '12px', height: '12px' }} />
+                          Analyze
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => resetVideoUpload('feed1')}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: '#6b7280',
+                        color: 'white',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw style={{ width: '12px', height: '12px' }} />
+                    </button>
+                  </div>
+                  
+                  {isProcessingVideo.feed1 && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{
+                        width: '100%',
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '4px',
+                        height: '4px',
+                        overflow: 'hidden'
+                      }}>
+                        <div 
+                          style={{
+                            background: '#8b5cf6',
+                            height: '100%',
+                            borderRadius: '4px',
+                            transition: 'width 0.5s ease',
+                            width: `${processingProgress.feed1}%`
+                          }}
+                        ></div>
+                      </div>
+                      {currentStatus.feed1 && (
+                        <div style={{ fontSize: '10px', color: '#cbd5e1', marginTop: '4px' }}>
+                          {currentStatus.feed1}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {processingError.feed1 && (
+                    <div style={{ fontSize: '10px', color: '#ef4444', marginTop: '4px' }}>
+                      {processingError.feed1}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <input
+                ref={videoUploadInputRef1}
+                type="file"
+                accept="video/*"
+                onChange={(e) => handleVideoFileSelect(e, 'feed1')}
+                style={{ display: 'none' }}
+              />
             </div>
-          )}
+          </div>
+
+          {/* Feed 2 */}
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.6)',
+            borderRadius: '20px',
+            border: '1px solid rgba(148, 163, 184, 0.1)',
+            overflow: 'hidden'
+          }}>
+            <div style={{ padding: '20px', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Camera style={{ width: '20px', height: '20px', color: '#10b981' }} />
+                  <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Camera Feed 2</h3>
+                  <span style={{
+                    fontSize: '10px',
+                    background: feeds.feed2.isLiveDetection ? '#10b981' : '#6b7280',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    color: 'white'
+                  }}>
+                    {feeds.feed2.isLiveDetection ? 'DETECTING' : feeds.feed2.isStreaming ? 'STREAMING' : 'OFFLINE'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => toggleCamera('feed2')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: feeds.feed2.isStreaming ? '#ef4444' : '#10b981',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {feeds.feed2.isStreaming ? <VideoOff style={{ width: '14px', height: '14px' }} /> : <Video style={{ width: '14px', height: '14px' }} />}
+                  {feeds.feed2.isStreaming ? 'Stop' : 'Start'}
+                </button>
+              </div>
+            </div>
+            
+            <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000' }}>
+              {/* Live camera or uploaded video */}
+              {videoPreview.feed2 ? (
+                <video
+                  ref={uploadVideoRef2}
+                  src={videoPreview.feed2}
+                  controls
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  onTimeUpdate={() => {
+                    if (videoAnalysisResults.feed2?.detection_timeline) {
+                      drawVideoAnalysisResults(videoAnalysisResults.feed2.detection_timeline, 'feed2');
+                    }
+                  }}
+                  onSeeked={() => {
+                    if (videoAnalysisResults.feed2?.detection_timeline) {
+                      drawVideoAnalysisResults(videoAnalysisResults.feed2.detection_timeline, 'feed2');
+                    }
+                  }}
+                />
+              ) : (
+                <video
+                  ref={videoRef2}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              )}
+              
+              <canvas
+                ref={canvasRef2}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none'
+                }}
+              />
+              
+              {!feeds.feed2.isStreaming && !videoPreview.feed2 && (
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #0f172a, #1e293b)'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Camera style={{ width: '48px', height: '48px', color: '#475569', margin: '0 auto 16px' }} />
+                    <p style={{ color: '#64748b', margin: 0 }}>Start camera or upload video</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Detection count overlay */}
+              {(feeds.feed2.isStreaming || videoPreview.feed2) && (
+                <div style={{ position: 'absolute', bottom: '16px', left: '16px' }}>
+                  <div style={{
+                    background: 'rgba(0, 0, 0, 0.8)',
+                    color: 'white',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Users style={{ width: '16px', height: '16px', color: '#10b981' }} />
+                    <div>
+                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>
+                        {videoAnalysisResults.feed2?.peak_occupancy || feeds.feed2.currentCount}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                        {videoPreview.feed2 ? 'PEAK' : 'LIVE'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Video Upload Section for Feed 2 */}
+            <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <FileVideo style={{ width: '16px', height: '16px', color: '#8b5cf6' }} />
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: 0 }}>Video Upload</h4>
+              </div>
+              
+              {!uploadedFiles.feed2 ? (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => videoUploadInputRef2.current?.click()}
+                    disabled={!isConnected}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: isConnected ? '#8b5cf6' : '#6b7280',
+                      color: 'white',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: isConnected ? 'pointer' : 'not-allowed',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Upload style={{ width: '14px', height: '14px' }} />
+                    Choose Video
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#cbd5e1' }}>{uploadedFiles.feed2.name}</div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => processUploadedVideo('feed2')}
+                      disabled={isProcessingVideo.feed2 || !isConnected}
+                      style={{
+                        flex: 1,
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: isProcessingVideo.feed2 || !isConnected ? '#6b7280' : '#8b5cf6',
+                        color: 'white',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        cursor: isProcessingVideo.feed2 || !isConnected ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {isProcessingVideo.feed2 ? (
+                        <>
+                          <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />
+                          {Math.round(processingProgress.feed2)}%
+                        </>
+                      ) : (
+                        <>
+                          <Play style={{ width: '12px', height: '12px' }} />
+                          Analyze
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => resetVideoUpload('feed2')}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: '#6b7280',
+                        color: 'white',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw style={{ width: '12px', height: '12px' }} />
+                    </button>
+                  </div>
+                  
+                  {isProcessingVideo.feed2 && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{
+                        width: '100%',
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '4px',
+                        height: '4px',
+                        overflow: 'hidden'
+                      }}>
+                        <div 
+                          style={{
+                            background: '#8b5cf6',
+                            height: '100%',
+                            borderRadius: '4px',
+                            transition: 'width 0.5s ease',
+                            width: `${processingProgress.feed2}%`
+                          }}
+                        ></div>
+                      </div>
+                      {currentStatus.feed2 && (
+                        <div style={{ fontSize: '10px', color: '#cbd5e1', marginTop: '4px' }}>
+                          {currentStatus.feed2}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {processingError.feed2 && (
+                    <div style={{ fontSize: '10px', color: '#ef4444', marginTop: '4px' }}>
+                      {processingError.feed2}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <input
+                ref={videoUploadInputRef2}
+                type="file"
+                accept="video/*"
+                onChange={(e) => handleVideoFileSelect(e, 'feed2')}
+                style={{ display: 'none' }}
+              />
+            </div>
+          </div>
+
+          {/* Right Sidebar - Analytics and Controls */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* Quick Stats */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              borderRadius: '16px',
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '20px'
+            }}>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BarChart3 style={{ width: '16px', height: '16px', color: '#60a5fa' }} />
+                Live Stats
+              </h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{
+                  background: 'rgba(30, 41, 59, 0.5)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  border: '1px solid rgba(59, 130, 246, 0.2)'
+                }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#60a5fa', marginBottom: '4px' }}>
+                    {feeds.feed1.currentCount + feeds.feed2.currentCount}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>CURRENT TOTAL</div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(30, 41, 59, 0.5)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  border: '1px solid rgba(16, 185, 129, 0.2)'
+                }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#10b981', marginBottom: '4px' }}>
+                    {analytics.peakOccupancy}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>PEAK COUNT</div>
+                </div>
+
+                <div style={{
+                  background: 'rgba(30, 41, 59, 0.5)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  border: '1px solid rgba(139, 92, 246, 0.2)'
+                }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
+                    {(videoAnalysisResults.feed1?.total_detections || 0) + (videoAnalysisResults.feed2?.total_detections || 0)}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>VIDEO TOTAL</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Configuration */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              borderRadius: '16px',
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '20px'
+            }}>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings style={{ width: '16px', height: '16px', color: '#a855f7' }} />
+                Settings
+              </h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#cbd5e1' }}>Detection Confidence</label>
+                    <span style={{ color: '#06b6d4', fontSize: '14px', fontWeight: '700' }}>{(config.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.01"
+                    max="0.95"
+                    step="0.01"
+                    value={config.confidence}
+                    onChange={(e) => setConfig({...config, confidence: parseFloat(e.target.value)})}
+                    style={{
+                      width: '100%',
+                      height: '4px',
+                      background: '#374151',
+                      borderRadius: '4px',
+                      appearance: 'none',
+                      cursor: 'pointer',
+                      accentColor: '#06b6d4'
+                    }}
+                  />
+                </div>
+                
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '600', color: '#cbd5e1', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={config.showBoundingBoxes}
+                      onChange={(e) => setConfig({...config, showBoundingBoxes: e.target.checked})}
+                      style={{ accentColor: '#06b6d4' }}
+                    />
+                    Show Bounding Boxes
+                  </label>
+                </div>
+                
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '600', color: '#cbd5e1', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={config.alertEnabled}
+                      onChange={(e) => setConfig({...config, alertEnabled: e.target.checked})}
+                      style={{ accentColor: '#06b6d4' }}
+                    />
+                    Enable Alerts
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* System Status & Alerts */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              borderRadius: '16px',
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '20px'
+            }}>
+              <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle style={{ width: '16px', height: '16px', color: '#ea580c' }} />
+                System Status
+              </h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto' }}>
+                {alerts && alerts.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px' }}>
+                    <CheckCircle style={{ width: '32px', height: '32px', color: '#10b981', margin: '0 auto 12px' }} />
+                    <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>All systems operational</p>
+                  </div>
+                ) : (
+                  (alerts || []).map((alert) => (
+                    <div
+                      key={alert.id}
+                      style={{
+                        padding: '10px',
+                        borderRadius: '6px',
+                        borderLeft: `3px solid ${
+                          alert.severity === 'high' 
+                            ? '#ef4444' 
+                            : alert.severity === 'medium'
+                            ? '#fbbf24'
+                            : '#10b981'
+                        }`,
+                        background: 'rgba(30, 41, 59, 0.3)',
+                        border: '1px solid rgba(71, 85, 105, 0.3)'
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', fontWeight: '600', color: 'white', marginBottom: '4px' }}>{alert.message}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '9px', color: '#94a3b8' }}>
+                        <Clock style={{ width: '8px', height: '8px' }} />
+                        <span>{alert.time}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Timeline Analysis Section */}
+        {(videoAnalysisResults.feed1 || videoAnalysisResults.feed2) && (
+          <div style={{ marginTop: '30px' }}>
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              borderRadius: '20px',
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              padding: '30px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '30px' }}>
+                <LineChart style={{ width: '24px', height: '24px', color: '#06b6d4' }} />
+                <div>
+                  <h3 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Timeline Analysis</h3>
+                  <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Detailed detection patterns over time</p>
+                </div>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+                {/* Feed 1 Analysis */}
+                {videoAnalysisResults.feed1 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#60a5fa' }}>Feed 1 Analysis</h4>
+                      <button
+                        onClick={() => downloadVideoResults('feed1')}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#3b82f6',
+                          color: 'white',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Download style={{ width: '14px', height: '14px' }} />
+                        Download
+                      </button>
+                    </div>
+                    
+                    {/* Timeline Chart Visualization */}
+                    <div style={{
+                      background: 'rgba(30, 41, 59, 0.5)',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      marginBottom: '20px'
+                    }}>
+                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>
+                        Detection Timeline (First 10 samples)
+                      </h5>
+                      
+                      {videoAnalysisResults.feed1.detection_timeline && (
+                        <div style={{ overflowX: 'auto' }}>
+                          <div style={{ display: 'flex', alignItems: 'end', gap: '8px', minWidth: '400px', height: '120px', paddingBottom: '20px' }}>
+                            {createTimelineChartData(videoAnalysisResults.feed1).map((entry, index) => (
+                              <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                                <div style={{
+                                  width: '20px',
+                                  height: `${Math.max(entry.people * 10, 5)}px`,
+                                  background: entry.people > 5 ? '#ef4444' : entry.people > 2 ? '#f59e0b' : '#10b981',
+                                  borderRadius: '2px',
+                                  marginBottom: '8px',
+                                  position: 'relative'
+                                }}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '-20px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    fontSize: '10px',
+                                    color: 'white',
+                                    fontWeight: '600'
+                                  }}>
+                                    {entry.people}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#94a3b8', textAlign: 'center' }}>
+                                  {entry.time}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Summary Stats */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div style={{
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#60a5fa' }}>
+                          {videoAnalysisResults.feed1.total_detections}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Total Detections</div>
+                      </div>
+                      <div style={{
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
+                          {videoAnalysisResults.feed1.peak_occupancy}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Feed 2 Analysis */}
+                {videoAnalysisResults.feed2 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#10b981' }}>Feed 2 Analysis</h4>
+                      <button
+                        onClick={() => downloadVideoResults('feed2')}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#10b981',
+                          color: 'white',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Download style={{ width: '14px', height: '14px' }} />
+                        Download
+                      </button>
+                    </div>
+                    
+                    {/* Timeline Chart Visualization */}
+                    <div style={{
+                      background: 'rgba(30, 41, 59, 0.5)',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      marginBottom: '20px'
+                    }}>
+                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>
+                        Detection Timeline (First 10 samples)
+                      </h5>
+                      
+                      {videoAnalysisResults.feed2.detection_timeline && (
+                        <div style={{ overflowX: 'auto' }}>
+                          <div style={{ display: 'flex', alignItems: 'end', gap: '8px', minWidth: '400px', height: '120px', paddingBottom: '20px' }}>
+                            {createTimelineChartData(videoAnalysisResults.feed2).map((entry, index) => (
+                              <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                                <div style={{
+                                  width: '20px',
+                                  height: `${Math.max(entry.people * 10, 5)}px`,
+                                  background: entry.people > 5 ? '#ef4444' : entry.people > 2 ? '#f59e0b' : '#10b981',
+                                  borderRadius: '2px',
+                                  marginBottom: '8px',
+                                  position: 'relative'
+                                }}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '-20px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    fontSize: '10px',
+                                    color: 'white',
+                                    fontWeight: '600'
+                                  }}>
+                                    {entry.people}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#94a3b8', textAlign: 'center' }}>
+                                  {entry.time}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Summary Stats */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div style={{
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
+                          {videoAnalysisResults.feed2.total_detections}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Total Detections</div>
+                      </div>
+                      <div style={{
+                        background: 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '20px', fontWeight: '700', color: '#f59e0b' }}>
+                          {videoAnalysisResults.feed2.peak_occupancy}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       
       <style>{`
