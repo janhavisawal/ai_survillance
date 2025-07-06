@@ -456,7 +456,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   }, [isConnected, config, apiUrl]);
 
-  // Enhanced video analysis drawing
+  // Enhanced video analysis drawing with transparent bounding boxes
   const drawVideoAnalysisResults = useCallback((timelineData: any[] = [], feedId: 'feed1' | 'feed2') => {
     const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
@@ -494,7 +494,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    // Draw each detection
+    // Draw each detection with transparent style
     closestEntry.detections.forEach((detection: any, index: number) => {
       const { bbox, confidence } = detection;
       if (!bbox || bbox.length !== 4) return;
@@ -505,44 +505,54 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
-      // Color based on confidence
-      let color = 'rgba(255, 255, 255, 0.8)';
-      if (confidence >= 0.7) {
-        color = 'rgba(16, 185, 129, 0.7)';
-      } else if (confidence >= 0.4) {
-        color = 'rgba(245, 158, 11, 0.7)';
-      } else {
-        color = 'rgba(239, 68, 68, 0.7)';
-      }
+      // Transparent bounding box - blue theme like the example
+      const boxColor = 'rgba(59, 130, 246, 0.3)';  // Transparent blue fill
+      const borderColor = 'rgba(59, 130, 246, 0.8)';  // Semi-transparent blue border
       
-      ctx.strokeStyle = color;
+      // Draw filled rectangle (transparent background)
+      ctx.fillStyle = boxColor;
+      ctx.fillRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+      
+      // Draw border
+      ctx.strokeStyle = borderColor;
       ctx.lineWidth = 2;
       ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
       
-      // Confidence label
-      if (confidence > 0.5) {
-        ctx.font = '12px system-ui';
-        const text = `${(confidence * 100).toFixed(0)}%`;
-        const textMetrics = ctx.measureText(text);
+      // Small confidence badge in corner
+      if (confidence > 0.4) {
+        const badgeText = `${(confidence * 100).toFixed(0)}%`;
+        ctx.font = '11px system-ui';
+        const textMetrics = ctx.measureText(badgeText);
         
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(scaledX1, scaledY1 - 20, textMetrics.width + 8, 16);
+        // Small badge background
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
+        ctx.fillRect(scaledX1, scaledY1 - 18, textMetrics.width + 8, 16);
         
+        // Badge text
         ctx.fillStyle = 'white';
-        ctx.fillText(text, scaledX1 + 4, scaledY1 - 8);
+        ctx.fillText(badgeText, scaledX1 + 4, scaledY1 - 6);
       }
+      
+      // Small center dot
+      const centerX = (scaledX1 + scaledX2) / 2;
+      const centerY = (scaledY1 + scaledY2) / 2;
+      
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
+      ctx.fill();
     });
     
-    // Header with detection count
-    const headerText = `ANALYZED: ${closestEntry.detections.length} People at ${currentTime.toFixed(1)}s`;
-    ctx.font = 'bold 16px system-ui';
+    // Clean header with people count
+    const headerText = `${closestEntry.detections.length} People Detected`;
+    ctx.font = 'bold 14px system-ui';
     const headerMetrics = ctx.measureText(headerText);
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(10, 10, headerMetrics.width + 20, 30);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(10, 10, headerMetrics.width + 16, 28);
     
-    ctx.fillStyle = '#8b5cf6';
-    ctx.fillText(headerText, 20, 30);
+    ctx.fillStyle = 'white';
+    ctx.fillText(headerText, 18, 28);
   }, []);
 
   const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
@@ -580,58 +590,62 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
-      // Dynamic color based on confidence
-      let color, thickness;
-      if (confidence >= 0.7) {
-        color = '#10b981'; // Green for high confidence
-        thickness = 3;
-      } else if (confidence >= 0.4) {
-        color = '#f59e0b'; // Yellow for medium confidence
-        thickness = 2;
-      } else {
-        color = '#ef4444'; // Red for low confidence
-        thickness = 2;
-      }
+      // Transparent blue styling like the example
+      const boxColor = 'rgba(16, 185, 129, 0.25)';  // Transparent green fill
+      const borderColor = 'rgba(16, 185, 129, 0.8)';  // Semi-transparent green border
       
-      // Draw bounding box
-      ctx.strokeStyle = color;
-      ctx.lineWidth = thickness;
+      // Draw filled rectangle (transparent background)
+      ctx.fillStyle = boxColor;
+      ctx.fillRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+      
+      // Draw border
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 2;
       ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
       
-      // Draw confidence label with background
-      ctx.font = 'bold 14px system-ui';
-      const text = `Person ${index + 1}: ${(confidence * 100).toFixed(1)}%`;
-      const textMetrics = ctx.measureText(text);
+      // Small confidence badge
+      if (confidence > 0.4) {
+        const badgeText = `${(confidence * 100).toFixed(0)}%`;
+        ctx.font = '11px system-ui';
+        const textMetrics = ctx.measureText(badgeText);
+        
+        // Badge background
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+        ctx.fillRect(scaledX1, scaledY1 - 18, textMetrics.width + 8, 16);
+        
+        // Badge text
+        ctx.fillStyle = 'white';
+        ctx.fillText(badgeText, scaledX1 + 4, scaledY1 - 6);
+      }
       
-      // Background for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(scaledX1, scaledY1 - 28, textMetrics.width + 12, 24);
-      
-      // Text
-      ctx.fillStyle = color;
-      ctx.fillText(text, scaledX1 + 6, scaledY1 - 8);
-      
-      // Center point
+      // Small center dot
       const centerX = (scaledX1 + scaledX2) / 2;
       const centerY = (scaledY1 + scaledY2) / 2;
       
-      ctx.fillStyle = color;
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.8)';
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
+      ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
       ctx.fill();
     });
     
     // Live indicator
     if (detections.length > 0) {
-      const headerText = `LIVE: ${detections.length} People Detected`;
-      ctx.font = 'bold 16px system-ui';
+      const headerText = `${detections.length} People Detected`;
+      ctx.font = 'bold 14px system-ui';
       const headerMetrics = ctx.measureText(headerText);
       
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(10, 10, headerMetrics.width + 20, 30);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(10, 10, headerMetrics.width + 16, 28);
       
-      ctx.fillStyle = '#ef4444';
-      ctx.fillText(headerText, 20, 30);
+      ctx.fillStyle = 'white';
+      ctx.fillText(headerText, 18, 28);
+      
+      // Live badge
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+      ctx.fillRect(canvas.width - 60, 10, 50, 20);
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 11px system-ui';
+      ctx.fillText('● LIVE', canvas.width - 55, 24);
     }
   };
 
@@ -859,15 +873,26 @@ export default function EnhancedVideoAnalyticsDashboard() {
     }
   };
 
-  // Create timeline chart data
+  // Create simple timeline chart data focused on people count over time
   const createTimelineChartData = (result: VideoAnalysisResult | null) => {
     if (!result?.detection_timeline) return [];
     
-    return result.detection_timeline.slice(0, 20).map(entry => ({
-      time: `${entry.timestamp.toFixed(1)}s`,
-      people: entry.people_count,
-      confidence: (entry.avg_confidence * 100).toFixed(1)
-    }));
+    // Take more samples for better visualization, but limit for performance
+    const maxSamples = 30;
+    const timeline = result.detection_timeline;
+    const step = Math.max(1, Math.floor(timeline.length / maxSamples));
+    
+    return timeline
+      .filter((_, index) => index % step === 0)
+      .slice(0, maxSamples)
+      .map(entry => ({
+        time: `${Math.floor(entry.timestamp / 60)}:${(entry.timestamp % 60).toFixed(0).padStart(2, '0')}`,
+        timeSeconds: entry.timestamp,
+        people: entry.people_count,
+        color: entry.people_count > 8 ? '#ef4444' : 
+               entry.people_count > 4 ? '#f59e0b' : 
+               entry.people_count > 0 ? '#10b981' : '#6b7280'
+      }));
   };
 
   // Cleanup on unmount
@@ -1565,9 +1590,12 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   border: '1px solid rgba(139, 92, 246, 0.2)'
                 }}>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
-                    {(videoAnalysisResults.feed1?.total_detections || 0) + (videoAnalysisResults.feed2?.total_detections || 0)}
+                    {Math.max(
+                      videoAnalysisResults.feed1?.peak_occupancy || 0,
+                      videoAnalysisResults.feed2?.peak_occupancy || 0
+                    )}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>VIDEO TOTAL</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>VIDEO PEAK</div>
                 </div>
               </div>
             </div>
@@ -1684,7 +1712,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
           </div>
         </div>
 
-        {/* Timeline Analysis Section */}
+        {/* Simplified Timeline Analysis Section */}
         {(videoAnalysisResults.feed1 || videoAnalysisResults.feed2) && (
           <div style={{ marginTop: '30px' }}>
             <div style={{
@@ -1694,19 +1722,20 @@ export default function EnhancedVideoAnalyticsDashboard() {
               padding: '30px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '30px' }}>
-                <LineChart style={{ width: '24px', height: '24px', color: '#06b6d4' }} />
+                <BarChart3 style={{ width: '24px', height: '24px', color: '#06b6d4' }} />
                 <div>
-                  <h3 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Timeline Analysis</h3>
-                  <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Detailed detection patterns over time</p>
+                  <h3 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Video Analysis</h3>
+                  <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>People count over time</p>
                 </div>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: videoAnalysisResults.feed1 && videoAnalysisResults.feed2 ? '1fr 1fr' : '1fr', gap: '30px' }}>
+                
                 {/* Feed 1 Analysis */}
                 {videoAnalysisResults.feed1 && (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#60a5fa' }}>Feed 1 Analysis</h4>
+                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#60a5fa' }}>Feed 1 Timeline</h4>
                       <button
                         onClick={() => downloadVideoResults('feed1')}
                         style={{
@@ -1724,11 +1753,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         }}
                       >
                         <Download style={{ width: '14px', height: '14px' }} />
-                        Download
+                        Download Data
                       </button>
                     </div>
                     
-                    {/* Timeline Chart Visualization */}
+                    {/* Simplified Timeline Chart */}
                     <div style={{
                       background: 'rgba(30, 41, 59, 0.5)',
                       borderRadius: '12px',
@@ -1736,45 +1765,93 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       marginBottom: '20px'
                     }}>
                       <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>
-                        Detection Timeline (First 10 samples)
+                        People Count Over Time
                       </h5>
                       
                       {videoAnalysisResults.feed1.detection_timeline && (
                         <div style={{ overflowX: 'auto' }}>
-                          <div style={{ display: 'flex', alignItems: 'end', gap: '8px', minWidth: '400px', height: '120px', paddingBottom: '20px' }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'end', 
+                            gap: '6px', 
+                            minWidth: '600px', 
+                            height: '140px', 
+                            paddingBottom: '30px',
+                            paddingTop: '20px'
+                          }}>
                             {createTimelineChartData(videoAnalysisResults.feed1).map((entry, index) => (
-                              <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                              <div key={index} style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center', 
+                                flex: 1,
+                                minWidth: '20px'
+                              }}>
+                                {/* Bar */}
                                 <div style={{
-                                  width: '20px',
-                                  height: `${Math.max(entry.people * 10, 5)}px`,
-                                  background: entry.people > 5 ? '#ef4444' : entry.people > 2 ? '#f59e0b' : '#10b981',
-                                  borderRadius: '2px',
+                                  width: '18px',
+                                  height: `${Math.max(entry.people * 12, 4)}px`,
+                                  background: entry.color,
+                                  borderRadius: '2px 2px 0 0',
                                   marginBottom: '8px',
-                                  position: 'relative'
+                                  position: 'relative',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                                 }}>
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: '-20px',
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    fontSize: '10px',
-                                    color: 'white',
-                                    fontWeight: '600'
-                                  }}>
-                                    {entry.people}
-                                  </div>
+                                  {/* People count label above bar */}
+                                  {entry.people > 0 && (
+                                    <div style={{
+                                      position: 'absolute',
+                                      top: '-20px',
+                                      left: '50%',
+                                      transform: 'translateX(-50%)',
+                                      fontSize: '11px',
+                                      color: 'white',
+                                      fontWeight: '700',
+                                      background: 'rgba(0,0,0,0.6)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {entry.people}
+                                    </div>
+                                  )}
                                 </div>
-                                <div style={{ fontSize: '9px', color: '#94a3b8', textAlign: 'center' }}>
+                                {/* Time label */}
+                                <div style={{ 
+                                  fontSize: '9px', 
+                                  color: '#94a3b8', 
+                                  textAlign: 'center',
+                                  transform: 'rotate(-45deg)',
+                                  transformOrigin: 'center',
+                                  whiteSpace: 'nowrap',
+                                  marginTop: '4px'
+                                }}>
                                   {entry.time}
                                 </div>
                               </div>
                             ))}
                           </div>
+                          
+                          {/* Legend */}
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '16px', fontSize: '11px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }}></div>
+                              <span style={{ color: '#94a3b8' }}>1-4 People</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '12px', height: '12px', background: '#f59e0b', borderRadius: '2px' }}></div>
+                              <span style={{ color: '#94a3b8' }}>5-8 People</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></div>
+                              <span style={{ color: '#94a3b8' }}>9+ People</span>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
                     
-                    {/* Summary Stats */}
+                    {/* Simple Summary Stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div style={{
                         background: 'rgba(30, 41, 59, 0.5)',
@@ -1783,9 +1860,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         textAlign: 'center'
                       }}>
                         <div style={{ fontSize: '20px', fontWeight: '700', color: '#60a5fa' }}>
-                          {videoAnalysisResults.feed1.total_detections}
+                          {videoAnalysisResults.feed1.peak_occupancy}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Total Detections</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
                       </div>
                       <div style={{
                         background: 'rgba(30, 41, 59, 0.5)',
@@ -1794,9 +1871,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         textAlign: 'center'
                       }}>
                         <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
-                          {videoAnalysisResults.feed1.peak_occupancy}
+                          {Math.floor(videoAnalysisResults.feed1.video_duration / 60)}:{(videoAnalysisResults.feed1.video_duration % 60).toFixed(0).padStart(2, '0')}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Duration</div>
                       </div>
                     </div>
                   </div>
@@ -1806,7 +1883,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                 {videoAnalysisResults.feed2 && (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#10b981' }}>Feed 2 Analysis</h4>
+                      <h4 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#10b981' }}>Feed 2 Timeline</h4>
                       <button
                         onClick={() => downloadVideoResults('feed2')}
                         style={{
@@ -1824,11 +1901,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         }}
                       >
                         <Download style={{ width: '14px', height: '14px' }} />
-                        Download
+                        Download Data
                       </button>
                     </div>
                     
-                    {/* Timeline Chart Visualization */}
+                    {/* Simplified Timeline Chart */}
                     <div style={{
                       background: 'rgba(30, 41, 59, 0.5)',
                       borderRadius: '12px',
@@ -1836,45 +1913,93 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       marginBottom: '20px'
                     }}>
                       <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>
-                        Detection Timeline (First 10 samples)
+                        People Count Over Time
                       </h5>
                       
                       {videoAnalysisResults.feed2.detection_timeline && (
                         <div style={{ overflowX: 'auto' }}>
-                          <div style={{ display: 'flex', alignItems: 'end', gap: '8px', minWidth: '400px', height: '120px', paddingBottom: '20px' }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'end', 
+                            gap: '6px', 
+                            minWidth: '600px', 
+                            height: '140px', 
+                            paddingBottom: '30px',
+                            paddingTop: '20px'
+                          }}>
                             {createTimelineChartData(videoAnalysisResults.feed2).map((entry, index) => (
-                              <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                              <div key={index} style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center', 
+                                flex: 1,
+                                minWidth: '20px'
+                              }}>
+                                {/* Bar */}
                                 <div style={{
-                                  width: '20px',
-                                  height: `${Math.max(entry.people * 10, 5)}px`,
-                                  background: entry.people > 5 ? '#ef4444' : entry.people > 2 ? '#f59e0b' : '#10b981',
-                                  borderRadius: '2px',
+                                  width: '18px',
+                                  height: `${Math.max(entry.people * 12, 4)}px`,
+                                  background: entry.color,
+                                  borderRadius: '2px 2px 0 0',
                                   marginBottom: '8px',
-                                  position: 'relative'
+                                  position: 'relative',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                                 }}>
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: '-20px',
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    fontSize: '10px',
-                                    color: 'white',
-                                    fontWeight: '600'
-                                  }}>
-                                    {entry.people}
-                                  </div>
+                                  {/* People count label above bar */}
+                                  {entry.people > 0 && (
+                                    <div style={{
+                                      position: 'absolute',
+                                      top: '-20px',
+                                      left: '50%',
+                                      transform: 'translateX(-50%)',
+                                      fontSize: '11px',
+                                      color: 'white',
+                                      fontWeight: '700',
+                                      background: 'rgba(0,0,0,0.6)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {entry.people}
+                                    </div>
+                                  )}
                                 </div>
-                                <div style={{ fontSize: '9px', color: '#94a3b8', textAlign: 'center' }}>
+                                {/* Time label */}
+                                <div style={{ 
+                                  fontSize: '9px', 
+                                  color: '#94a3b8', 
+                                  textAlign: 'center',
+                                  transform: 'rotate(-45deg)',
+                                  transformOrigin: 'center',
+                                  whiteSpace: 'nowrap',
+                                  marginTop: '4px'
+                                }}>
                                   {entry.time}
                                 </div>
                               </div>
                             ))}
                           </div>
+                          
+                          {/* Legend */}
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '16px', fontSize: '11px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }}></div>
+                              <span style={{ color: '#94a3b8' }}>1-4 People</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '12px', height: '12px', background: '#f59e0b', borderRadius: '2px' }}></div>
+                              <span style={{ color: '#94a3b8' }}>5-8 People</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></div>
+                              <span style={{ color: '#94a3b8' }}>9+ People</span>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
                     
-                    {/* Summary Stats */}
+                    {/* Simple Summary Stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div style={{
                         background: 'rgba(30, 41, 59, 0.5)',
@@ -1883,9 +2008,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         textAlign: 'center'
                       }}>
                         <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
-                          {videoAnalysisResults.feed2.total_detections}
+                          {videoAnalysisResults.feed2.peak_occupancy}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Total Detections</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
                       </div>
                       <div style={{
                         background: 'rgba(30, 41, 59, 0.5)',
@@ -1894,9 +2019,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         textAlign: 'center'
                       }}>
                         <div style={{ fontSize: '20px', fontWeight: '700', color: '#f59e0b' }}>
-                          {videoAnalysisResults.feed2.peak_occupancy}
+                          {Math.floor(videoAnalysisResults.feed2.video_duration / 60)}:{(videoAnalysisResults.feed2.video_duration % 60).toFixed(0).padStart(2, '0')}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Peak Count</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>Duration</div>
                       </div>
                     </div>
                   </div>
