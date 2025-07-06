@@ -951,7 +951,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                 </div>
                 
                 <div style={{ padding: '32px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 320px', gap: '32px' }}>
                     {/* Feed 1 */}
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -1029,26 +1029,38 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         border: '1px solid rgba(148, 163, 184, 0.1)',
                         aspectRatio: '16/9'
                       }}>
-                        <video
-                          ref={videoRef1}
-                          autoPlay
-                          muted
-                          playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                        <canvas
-                          ref={canvasRef1}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            pointerEvents: 'none'
-                          }}
-                        />
+                        {/* Show uploaded video if available, otherwise camera feed */}
+                        {uploadedFile && activeTab === 'live' ? (
+                          <video
+                            ref={uploadVideoRef}
+                            src={videoPreview}
+                            controls
+                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                          />
+                        ) : (
+                          <>
+                            <video
+                              ref={videoRef1}
+                              autoPlay
+                              muted
+                              playsInline
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <canvas
+                              ref={canvasRef1}
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                pointerEvents: 'none'
+                              }}
+                            />
+                          </>
+                        )}
                         
-                        {!feeds.feed1.isStreaming && (
+                        {!feeds.feed1.isStreaming && !uploadedFile && (
                           <div style={{
                             position: 'absolute',
                             inset: 0,
@@ -1065,7 +1077,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                           </div>
                         )}
                         
-                        {feeds.feed1.isStreaming && (
+                        {feeds.feed1.isStreaming && !uploadedFile && (
                           <div style={{ position: 'absolute', bottom: '24px', left: '24px' }}>
                             <div style={{
                               background: 'rgba(0, 0, 0, 0.8)',
@@ -1080,6 +1092,28 @@ export default function EnhancedVideoAnalyticsDashboard() {
                                 <div>
                                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#60a5fa' }}>{feeds.feed1.currentCount}</div>
                                   <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEOPLE DETECTED</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Video analysis overlay */}
+                        {uploadedFile && videoAnalysisResult && (
+                          <div style={{ position: 'absolute', bottom: '24px', left: '24px' }}>
+                            <div style={{
+                              background: 'rgba(0, 0, 0, 0.8)',
+                              backdropFilter: 'blur(8px)',
+                              color: 'white',
+                              padding: '16px 24px',
+                              borderRadius: '16px',
+                              border: '1px solid rgba(148, 163, 184, 0.1)'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <FileVideo style={{ width: '20px', height: '20px', color: '#8b5cf6' }} />
+                                <div>
+                                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6' }}>{videoAnalysisResult.analysis_summary.peak_occupancy}</div>
+                                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>PEAK DETECTED</div>
                                 </div>
                               </div>
                             </div>
@@ -1223,92 +1257,257 @@ export default function EnhancedVideoAnalyticsDashboard() {
                         )}
                       </div>
                     </div>
+
+                    {/* Right Sidebar - Upload and Controls */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                      {/* Video Upload Section */}
+                      <div style={{
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        backdropFilter: 'blur(20px)',
+                        borderRadius: '20px',
+                        border: '1px solid rgba(148, 163, 184, 0.1)',
+                        padding: '24px',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                          <div style={{
+                            padding: '8px',
+                            background: 'linear-gradient(45deg, #8b5cf6, #a855f7)',
+                            borderRadius: '12px'
+                          }}>
+                            <FileVideo style={{ width: '20px', height: '20px', color: 'white' }} />
+                          </div>
+                          <div>
+                            <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'white', margin: 0 }}>Video Upload</h3>
+                            <p style={{ color: '#94a3b8', margin: '2px 0 0 0', fontSize: '12px' }}>Analyze video files</p>
+                          </div>
+                        </div>
+
+                        {!uploadedFile ? (
+                          <div style={{
+                            border: '2px dashed #6b7280',
+                            borderRadius: '12px',
+                            padding: '20px',
+                            textAlign: 'center'
+                          }}>
+                            <Upload style={{ width: '32px', height: '32px', color: '#6b7280', margin: '0 auto 12px' }} />
+                            <p style={{ color: '#94a3b8', margin: '0 0 16px 0', fontSize: '12px' }}>
+                              Select video for AI analysis
+                            </p>
+                            <button
+                              onClick={() => videoUploadInputRef.current?.click()}
+                              disabled={!isConnected}
+                              style={{
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: isConnected ? '#8b5cf6' : '#6b7280',
+                                color: 'white',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: isConnected ? 'pointer' : 'not-allowed',
+                                width: '100%'
+                              }}
+                            >
+                              Choose File
+                            </button>
+                            {!isConnected && (
+                              <p style={{ color: '#ef4444', fontSize: '10px', margin: '8px 0 0 0' }}>
+                                Connect API first
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div style={{
+                              background: 'rgba(30, 41, 59, 0.5)',
+                              borderRadius: '8px',
+                              padding: '12px',
+                              border: '1px solid rgba(148, 163, 184, 0.1)'
+                            }}>
+                              <div style={{ fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>File:</div>
+                              <div style={{ fontSize: '11px', color: 'white', fontWeight: '600' }}>{uploadedFile.name}</div>
+                              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                                {(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB
+                              </div>
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={processUploadedVideo}
+                                disabled={isProcessingVideo || !isConnected}
+                                style={{
+                                  flex: 1,
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  border: 'none',
+                                  background: isProcessingVideo || !isConnected ? '#6b7280' : '#8b5cf6',
+                                  color: 'white',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  cursor: isProcessingVideo || !isConnected ? 'not-allowed' : 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                {isProcessingVideo ? (
+                                  <>
+                                    <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />
+                                    Analyzing
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play style={{ width: '12px', height: '12px' }} />
+                                    Analyze
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                onClick={resetVideoUpload}
+                                style={{
+                                  padding: '8px',
+                                  borderRadius: '8px',
+                                  border: 'none',
+                                  background: '#6b7280',
+                                  color: 'white',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <RotateCcw style={{ width: '12px', height: '12px' }} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <input
+                          ref={videoUploadInputRef}
+                          type="file"
+                          accept="video/*"
+                          onChange={handleVideoFileSelect}
+                          style={{ display: 'none' }}
+                        />
+                      </div>
+
+                      {/* Processing Progress */}
+                      {isProcessingVideo && (
+                        <div style={{
+                          background: 'rgba(15, 23, 42, 0.6)',
+                          backdropFilter: 'blur(20px)',
+                          borderRadius: '20px',
+                          border: '1px solid rgba(148, 163, 184, 0.1)',
+                          padding: '20px',
+                          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'white', margin: 0 }}>Processing</h4>
+                            <span style={{ color: '#8b5cf6', fontSize: '14px', fontWeight: '700' }}>{Math.round(processingProgress)}%</span>
+                          </div>
+                          
+                          <div style={{
+                            width: '100%',
+                            background: 'rgba(30, 41, 59, 0.5)',
+                            borderRadius: '8px',
+                            height: '6px',
+                            marginBottom: '12px',
+                            overflow: 'hidden'
+                          }}>
+                            <div 
+                              style={{
+                                background: 'linear-gradient(90deg, #8b5cf6, #06b6d4)',
+                                height: '100%',
+                                borderRadius: '8px',
+                                transition: 'width 0.5s ease',
+                                width: `${processingProgress}%`
+                              }}
+                            ></div>
+                          </div>
+                          
+                          {currentStatus && (
+                            <div style={{ fontSize: '11px', color: '#cbd5e1' }}>
+                              {currentStatus}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Error Display */}
+                      {processingError && (
+                        <div style={{
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: '12px',
+                          padding: '16px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <AlertCircle style={{ width: '16px', height: '16px', color: '#ef4444' }} />
+                            <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '12px' }}>Error</span>
+                          </div>
+                          <p style={{ color: '#fca5a5', margin: 0, fontSize: '11px' }}>{processingError}</p>
+                        </div>
+                      )}
+
+                      {/* Quick Stats */}
+                      <div style={{
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        backdropFilter: 'blur(20px)',
+                        borderRadius: '20px',
+                        border: '1px solid rgba(148, 163, 184, 0.1)',
+                        padding: '20px',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                      }}>
+                        <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'white', margin: '0 0 16px 0' }}>Quick Stats</h4>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{
+                            background: 'rgba(30, 41, 59, 0.5)',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            border: '1px solid rgba(59, 130, 246, 0.2)'
+                          }}>
+                            <div style={{ fontSize: '20px', fontWeight: '700', color: '#60a5fa', marginBottom: '4px' }}>
+                              {feeds.feed1.currentCount + feeds.feed2.currentCount}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#94a3b8' }}>CURRENT TOTAL</div>
+                          </div>
+                          
+                          <div style={{
+                            background: 'rgba(30, 41, 59, 0.5)',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            border: '1px solid rgba(16, 185, 129, 0.2)'
+                          }}>
+                            <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981', marginBottom: '4px' }}>
+                              {analytics.peakOccupancy}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#94a3b8' }}>PEAK COUNT</div>
+                          </div>
+
+                          {videoAnalysisResult && (
+                            <div style={{
+                              background: 'rgba(30, 41, 59, 0.5)',
+                              borderRadius: '8px',
+                              padding: '12px',
+                              border: '1px solid rgba(139, 92, 246, 0.2)'
+                            }}>
+                              <div style={{ fontSize: '20px', fontWeight: '700', color: '#8b5cf6', marginBottom: '4px' }}>
+                                {videoAnalysisResult.analysis_summary.total_detections.toLocaleString()}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#94a3b8' }}>VIDEO TOTAL</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
               
-              {/* Analytics Section for Live View */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '32px' }}>
-                {/* Real-time Analytics */}
-                <div style={{
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  backdropFilter: 'blur(20px)',
-                  borderRadius: '24px',
-                  border: '1px solid rgba(148, 163, 184, 0.1)',
-                  padding: '32px',
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
-                    <div style={{
-                      padding: '12px',
-                      background: 'linear-gradient(45deg, #06b6d4, #3b82f6)',
-                      borderRadius: '16px'
-                    }}>
-                      <BarChart3 style={{ width: '24px', height: '24px', color: 'white' }} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>Live Analytics</h3>
-                      <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Real-time detection stats</p>
-                    </div>
-                  </div>
-                  
-                  <div style={{
-                    textAlign: 'center',
-                    marginBottom: '24px',
-                    padding: '24px',
-                    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2))',
-                    borderRadius: '24px',
-                    border: '1px solid rgba(6, 182, 212, 0.3)'
-                  }}>
-                    <div style={{
-                      fontSize: '36px',
-                      fontWeight: '900',
-                      background: 'linear-gradient(45deg, #06b6d4, #3b82f6)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      marginBottom: '8px'
-                    }}>
-                      {feeds.feed1.currentCount + feeds.feed2.currentCount}
-                    </div>
-                    <div style={{ color: '#cbd5e1', fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>TOTAL DETECTED</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                      Peak: {analytics.peakOccupancy} people
-                    </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{
-                      background: 'rgba(30, 41, 59, 0.5)',
-                      borderRadius: '12px',
-                      padding: '16px',
-                      border: '1px solid rgba(59, 130, 246, 0.2)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: '#60a5fa', fontSize: '14px', fontWeight: '600' }}>Avg Confidence</span>
-                        <Zap style={{ width: '14px', height: '14px', color: '#60a5fa' }} />
-                      </div>
-                      <div style={{ fontSize: '20px', fontWeight: '700', color: '#60a5fa' }}>
-                        {(analytics.avgConfidence * 100).toFixed(1)}%
-                      </div>
-                    </div>
-                    
-                    <div style={{
-                      background: 'rgba(30, 41, 59, 0.5)',
-                      borderRadius: '12px',
-                      padding: '16px',
-                      border: '1px solid rgba(16, 185, 129, 0.2)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: '#10b981', fontSize: '14px', fontWeight: '600' }}>Processing Speed</span>
-                        <TrendingUp style={{ width: '14px', height: '14px', color: '#10b981' }} />
-                      </div>
-                      <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
-                        {analytics.processingStats.fps.toFixed(1)} FPS
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
+              {/* Analytics Section for Live View - moved below cameras */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
                 {/* Configuration */}
                 <div style={{
                   background: 'rgba(15, 23, 42, 0.6)',
@@ -1466,271 +1665,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            /* Video Upload Tab Content */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-              {/* Upload Section */}
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.6)',
-                backdropFilter: 'blur(20px)',
-                borderRadius: '24px',
-                border: '1px solid rgba(148, 163, 184, 0.1)',
-                padding: '32px',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{
-                      padding: '12px',
-                      background: 'linear-gradient(45deg, #8b5cf6, #a855f7)',
-                      borderRadius: '16px'
-                    }}>
-                      <FileVideo style={{ width: '24px', height: '24px', color: 'white' }} />
-                    </div>
-                    <div>
-                      <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: 0 }}>Video Analysis</h2>
-                      <p style={{ color: '#94a3b8', margin: '4px 0 0 0' }}>Upload and analyze videos with AI detection</p>
-                    </div>
-                  </div>
-                  {uploadedFile && (
-                    <button
-                      onClick={resetVideoUpload}
-                      style={{
-                        padding: '12px 20px',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: '#6b7280',
-                        color: 'white',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.background = '#4b5563'}
-                      onMouseOut={(e) => e.currentTarget.style.background = '#6b7280'}
-                    >
-                      <RotateCcw style={{ width: '16px', height: '16px' }} />
-                      Reset
-                    </button>
-                  )}
-                </div>
 
-                {!uploadedFile ? (
-                  <div style={{
-                    border: '2px dashed #6b7280',
-                    borderRadius: '16px',
-                    padding: '48px',
-                    textAlign: 'center'
-                  }}>
-                    <FileVideo style={{ width: '64px', height: '64px', color: '#6b7280', margin: '0 auto 24px' }} />
-                    <h3 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: '0 0 12px 0' }}>Upload Video for AI Analysis</h3>
-                    <p style={{ color: '#94a3b8', margin: '0 0 32px 0', fontSize: '16px' }}>
-                      Select a video file to run comprehensive person detection analysis
-                    </p>
-                    <button
-                      onClick={() => videoUploadInputRef.current?.click()}
-                      disabled={!isConnected}
-                      style={{
-                        padding: '16px 32px',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: isConnected ? '#8b5cf6' : '#6b7280',
-                        color: 'white',
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        cursor: isConnected ? 'pointer' : 'not-allowed',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        margin: '0 auto',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseOver={(e) => {
-                        if (isConnected) e.currentTarget.style.background = '#7c3aed';
-                      }}
-                      onMouseOut={(e) => {
-                        if (isConnected) e.currentTarget.style.background = '#8b5cf6';
-                      }}
-                    >
-                      <Upload style={{ width: '20px', height: '20px' }} />
-                      Choose Video File
-                    </button>
-                    {!isConnected && (
-                      <p style={{ color: '#ef4444', fontSize: '14px', margin: '16px 0 0 0' }}>
-                        Please connect to the API first
-                      </p>
-                    )}
-                    <p style={{ color: '#6b7280', fontSize: '14px', margin: '16px 0 0 0' }}>
-                      Supports: MP4, AVI, MOV, WMV, WebM (Max: 500MB)
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {/* Video Preview and File Info */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-                      <div>
-                        <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>Video Preview</h4>
-                        <div style={{
-                          position: 'relative',
-                          background: 'black',
-                          borderRadius: '16px',
-                          overflow: 'hidden',
-                          aspectRatio: '16/9'
-                        }}>
-                          <video
-                            ref={uploadVideoRef}
-                            src={videoPreview}
-                            controls
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>File Information</h4>
-                        <div style={{
-                          background: 'rgba(30, 41, 59, 0.5)',
-                          borderRadius: '16px',
-                          padding: '24px',
-                          border: '1px solid rgba(148, 163, 184, 0.1)'
-                        }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#94a3b8', fontSize: '14px' }}>Filename:</span>
-                              <span style={{ color: 'white', fontWeight: '600', fontSize: '14px' }}>{uploadedFile.name}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#94a3b8', fontSize: '14px' }}>Size:</span>
-                              <span style={{ color: 'white', fontSize: '14px' }}>{(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#94a3b8', fontSize: '14px' }}>Type:</span>
-                              <span style={{ color: 'white', fontSize: '14px' }}>{uploadedFile.type}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#94a3b8', fontSize: '14px' }}>Confidence Threshold:</span>
-                              <span style={{ color: '#8b5cf6', fontWeight: '700', fontSize: '14px' }}>{(config.confidence * 100).toFixed(1)}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Process Button */}
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <button
-                        onClick={processUploadedVideo}
-                        disabled={isProcessingVideo || !isConnected}
-                        style={{
-                          padding: '16px 40px',
-                          borderRadius: '12px',
-                          border: 'none',
-                          background: isProcessingVideo || !isConnected ? '#6b7280' : '#8b5cf6',
-                          color: 'white',
-                          fontSize: '18px',
-                          fontWeight: '700',
-                          cursor: isProcessingVideo || !isConnected ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                          transition: 'background 0.2s'
-                        }}
-                        onMouseOver={(e) => {
-                          if (!isProcessingVideo && isConnected) e.currentTarget.style.background = '#7c3aed';
-                        }}
-                        onMouseOut={(e) => {
-                          if (!isProcessingVideo && isConnected) e.currentTarget.style.background = '#8b5cf6';
-                        }}
-                      >
-                        {isProcessingVideo ? (
-                          <>
-                            <Loader2 style={{ width: '20px', height: '20px', animation: 'spin 1s linear infinite' }} />
-                            Processing Video...
-                          </>
-                        ) : (
-                          <>
-                            <Play style={{ width: '20px', height: '20px' }} />
-                            Start AI Analysis
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <input
-                  ref={videoUploadInputRef}
-                  type="file"
-                  accept="video/*"
-                  onChange={handleVideoFileSelect}
-                  style={{ display: 'none' }}
-                />
-              </div>
-
-              {/* Processing Progress */}
-              {isProcessingVideo && (
-                <div style={{
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  backdropFilter: 'blur(20px)',
-                  borderRadius: '24px',
-                  border: '1px solid rgba(148, 163, 184, 0.1)',
-                  padding: '32px',
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                    <h4 style={{ fontSize: '20px', fontWeight: '700', color: 'white', margin: 0 }}>Processing Video</h4>
-                    <span style={{ color: '#8b5cf6', fontSize: '20px', fontWeight: '700' }}>{Math.round(processingProgress)}%</span>
-                  </div>
-                  
-                  <div style={{
-                    width: '100%',
-                    background: 'rgba(30, 41, 59, 0.5)',
-                    borderRadius: '12px',
-                    height: '12px',
-                    marginBottom: '24px',
-                    overflow: 'hidden'
-                  }}>
-                    <div 
-                      style={{
-                        background: 'linear-gradient(90deg, #8b5cf6, #06b6d4)',
-                        height: '100%',
-                        borderRadius: '12px',
-                        transition: 'width 0.5s ease',
-                        width: `${processingProgress}%`
-                      }}
-                    ></div>
-                  </div>
-                  
-                  {currentStatus && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#cbd5e1' }}>
-                      <Loader2 style={{ width: '20px', height: '20px', color: '#8b5cf6', animation: 'spin 1s linear infinite' }} />
-                      <span style={{ fontSize: '16px' }}>{currentStatus}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Error Display */}
-              {processingError && (
-                <div style={{
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  borderRadius: '16px',
-                  padding: '24px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <AlertCircle style={{ width: '24px', height: '24px', color: '#ef4444' }} />
-                    <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '16px' }}>Processing Error</span>
-                  </div>
-                  <p style={{ color: '#fca5a5', margin: '12px 0 0 0', fontSize: '14px' }}>{processingError}</p>
-                </div>
-              )}
-
-              {/* Analysis Results */}
+              {/* Video Analysis Results Section */}
               {videoAnalysisResult && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                   {/* Summary Cards */}
@@ -1743,7 +1679,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
-                          <p style={{ color: '#6ee7b7', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Total Detections</p>
+                          <p style={{ color: '#6ee7b7', fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0' }}>Total Video Detections</p>
                           <p style={{ fontSize: '32px', fontWeight: '900', color: '#10b981', margin: 0 }}>
                             {videoAnalysisResult.analysis_summary.total_detections.toLocaleString()}
                           </p>
@@ -1797,7 +1733,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
-                      <h4 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: 0 }}>Detailed Analysis Results</h4>
+                      <h4 style={{ fontSize: '24px', fontWeight: '700', color: 'white', margin: 0 }}>Video Analysis Results</h4>
                       <button
                         onClick={downloadVideoResults}
                         style={{
@@ -1950,6 +1886,19 @@ export default function EnhancedVideoAnalyticsDashboard() {
                   </div>
                 </div>
               )}
+            </div>
+          ) : (
+            /* Video Upload Tab Content - Simplified since upload is now in sidebar */
+            <div style={{ 
+              padding: '100px',
+              textAlign: 'center',
+              color: '#94a3b8'
+            }}>
+              <FileVideo style={{ width: '64px', height: '64px', color: '#6b7280', margin: '0 auto 24px' }} />
+              <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#cbd5e1', margin: '0 0 12px 0' }}>Video upload functionality</h3>
+              <p style={{ margin: 0, fontSize: '16px' }}>
+                Video upload is now available in the sidebar on the Live Cameras tab
+              </p>
             </div>
           )}
         </div>
