@@ -261,12 +261,38 @@ export default function EnhancedVideoAnalyticsDashboard() {
       setVideoAnalysisResult(result);
       setIsProcessingVideo(false);
 
+      // Debug: Log the complete analysis result structure
+      console.log('=== COMPLETE ANALYSIS RESULT ===');
+      console.log('Full result object:', result);
+      console.log('Detection timeline:', result.detection_timeline);
+      console.log('Sample timeline entry:', result.detection_timeline?.[0]);
+      if (result.detection_timeline?.[0]?.detections) {
+        console.log('Sample detection:', result.detection_timeline[0].detections[0]);
+      }
+      console.log('=== END ANALYSIS RESULT ===');
+
       // Draw initial detections on the video
       setTimeout(() => {
+        console.log('Attempting initial detection drawing...');
         if (result.detection_timeline && result.detection_timeline.length > 0) {
+          console.log('Calling drawVideoAnalysisResults with timeline data');
           drawVideoAnalysisResults(result.detection_timeline);
+        } else {
+          console.log('❌ No detection timeline data available for drawing');
         }
-      }, 500);
+      }, 1000);
+
+      // Also try to draw when video is ready
+      setTimeout(() => {
+        const video = uploadVideoRef.current;
+        if (video && video.readyState >= 2) { // HAVE_CURRENT_DATA
+          console.log('Video is ready, forcing detection draw');
+          video.currentTime = 0; // Start at beginning
+          setTimeout(() => {
+            drawVideoAnalysisResults(result.detection_timeline);
+          }, 100);
+        }
+      }, 1500);
 
       // Update analytics with video results
       setAnalytics(prev => ({
@@ -410,15 +436,31 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const video = uploadVideoRef.current;
     const canvas = canvasRef1.current;
     
-    if (!video || !canvas || !timelineData.length) return;
+    if (!video || !canvas || !timelineData.length) {
+      console.log('Cannot draw detections:', { 
+        hasVideo: !!video, 
+        hasCanvas: !!canvas, 
+        timelineLength: timelineData.length 
+      });
+      return;
+    }
     
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.log('No canvas context available');
+      return;
+    }
     
     // Set canvas size to match video display
-    const rect = video.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const videoRect = video.getBoundingClientRect();
+    canvas.width = videoRect.width;
+    canvas.height = videoRect.height;
+    
+    console.log('Canvas setup:', {
+      canvasSize: { width: canvas.width, height: canvas.height },
+      videoSize: { width: video.videoWidth, height: video.videoHeight },
+      videoCurrentTime: video.currentTime
+    });
     
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -428,20 +470,43 @@ export default function EnhancedVideoAnalyticsDashboard() {
     
     // Find the closest timeline entry to current video time
     const closestEntry = timelineData.reduce((prev, curr) => {
-      return (Math.abs(curr.timestamp - currentTime) < Math.abs(prev.timestamp - currentTime)) ? curr : prev;
+      const prevDiff = Math.abs(prev.timestamp - currentTime);
+      const currDiff = Math.abs(curr.timestamp - currentTime);
+      return currDiff < prevDiff ? curr : prev;
     });
     
-    if (!closestEntry || !closestEntry.detections) return;
+    console.log('Closest entry found:', {
+      timestamp: closestEntry.timestamp,
+      currentTime: currentTime,
+      detectionsCount: closestEntry.detections?.length || 0,
+      entry: closestEntry
+    });
+    
+    if (!closestEntry || !closestEntry.detections || closestEntry.detections.length === 0) {
+      console.log('No detections to draw for current time');
+      return;
+    }
     
     // Calculate scaling factors
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    console.log(`Drawing ${closestEntry.detections.length} detections at time ${currentTime.toFixed(2)}s`);
+    console.log('Drawing detections:', {
+      detectionsCount: closestEntry.detections.length,
+      scale: { x: scaleX, y: scaleY },
+      timestamp: currentTime.toFixed(2)
+    });
     
     // Draw each detection
     closestEntry.detections.forEach((detection: any, index: number) => {
+      console.log(`Drawing detection ${index}:`, detection);
+      
       const { bbox, confidence } = detection;
+      if (!bbox || bbox.length !== 4) {
+        console.warn(`Invalid bbox for detection ${index}:`, bbox);
+        return;
+      }
+      
       const [x1, y1, x2, y2] = bbox;
       
       // Scale coordinates to canvas size
@@ -450,16 +515,20 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
+      console.log(`Detection ${index} coordinates:`, {
+        original: [x1, y1, x2, y2],
+        scaled: [scaledX1, scaledY1, scaledX2, scaledY2]
+      });
+      
       // Dynamic color based on confidence
-      let color, thickness;
-      if (confidence >= 0.7) {
-        color = '#10b981'; // Green for high confidence
-        thickness = 3;
-      } else if (confidence >= 0.4) {
-        color = '#f59e0b'; // Yellow for medium confidence
-        thickness = 2;
-      } else {
+      let color = '#10b981'; // Default green
+      let thickness = 3;
+      
+      if (confidence < 0.4) {
         color = '#ef4444'; // Red for low confidence
+        thickness = 2;
+      } else if (confidence < 0.7) {
+        color = '#f59e0b'; // Yellow for medium confidence
         thickness = 2;
       }
       
@@ -476,11 +545,11 @@ export default function EnhancedVideoAnalyticsDashboard() {
       
       // Background for text
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(scaledX1, scaledY1 - 28, textWidth + 12, 24);
+      ctx.fillRect(scaledX1, Math.max(0, scaledY1 - 28), textWidth + 12, 24);
       
       // Text
       ctx.fillStyle = color;
-      ctx.fillText(text, scaledX1 + 6, scaledY1 - 8);
+      ctx.fillText(text, scaledX1 + 6, Math.max(16, scaledY1 - 8));
       
       // Center point
       const centerX = (scaledX1 + scaledX2) / 2;
@@ -502,7 +571,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
       ctx.fillText(`${index + 1}`, centerX - 4, centerY + 4);
     });
     
-    // Header overlay with detection count and timestamp
+    // Always draw header to confirm canvas is working
     const headerText = `VIDEO: ${closestEntry.detections.length} People at ${currentTime.toFixed(1)}s`;
     ctx.font = 'bold 16px system-ui';
     const headerMetrics = ctx.measureText(headerText);
@@ -519,6 +588,8 @@ export default function EnhancedVideoAnalyticsDashboard() {
     ctx.fillStyle = 'white';
     ctx.font = 'bold 12px system-ui';
     ctx.fillText('● ANALYZED', canvas.width - 95, 27);
+    
+    console.log('Finished drawing detections');
   }, []);
   const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
