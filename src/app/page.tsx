@@ -542,55 +542,41 @@ export default function EnhancedVideoAnalyticsDashboard() {
         scaled: [scaledX1, scaledY1, scaledX2, scaledY2]
       });
       
-      // Dynamic color based on confidence
-      let color = '#10b981'; // Default green
-      let thickness = 3;
+      // Dynamic color and style - thin and transparent like reference
+      let color = 'rgba(255, 255, 255, 0.8)'; // Semi-transparent white
+      let thickness = 1; // Very thin lines
       
-      if (confidence < 0.4) {
-        color = '#ef4444'; // Red for low confidence
-        thickness = 2;
-      } else if (confidence < 0.7) {
-        color = '#f59e0b'; // Yellow for medium confidence
-        thickness = 2;
+      // Optional: slight color variation by confidence (still transparent)
+      if (confidence >= 0.7) {
+        color = 'rgba(16, 185, 129, 0.7)'; // Semi-transparent green
+      } else if (confidence >= 0.4) {
+        color = 'rgba(245, 158, 11, 0.7)'; // Semi-transparent yellow
+      } else {
+        color = 'rgba(239, 68, 68, 0.7)'; // Semi-transparent red
       }
       
-      // Draw bounding box
+      // Draw thin, transparent bounding box
       ctx.strokeStyle = color;
       ctx.lineWidth = thickness;
       ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
       
-      // Draw confidence label with background
-      ctx.font = 'bold 14px system-ui';
-      const text = `Person ${index + 1}: ${(confidence * 100).toFixed(1)}%`;
-      const textMetrics = ctx.measureText(text);
-      const textWidth = textMetrics.width;
+      // Optional: Small, minimal confidence label (much smaller and more transparent)
+      if (confidence > 0.5) { // Only show for higher confidence
+        ctx.font = '10px system-ui';
+        const text = `${(confidence * 100).toFixed(0)}%`;
+        const textMetrics = ctx.measureText(text);
+        
+        // Very subtle background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(scaledX1, scaledY1 - 15, textMetrics.width + 6, 12);
+        
+        // Small text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillText(text, scaledX1 + 3, scaledY1 - 5);
+      }
       
-      // Background for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(scaledX1, Math.max(0, scaledY1 - 28), textWidth + 12, 24);
-      
-      // Text
-      ctx.fillStyle = color;
-      ctx.fillText(text, scaledX1 + 6, Math.max(16, scaledY1 - 8));
-      
-      // Center point
-      const centerX = (scaledX1 + scaledX2) / 2;
-      const centerY = (scaledY1 + scaledY2) / 2;
-      
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
-      ctx.fill();
-      
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 2, 0, 2 * Math.PI);
-      ctx.fill();
-      
-      // Draw person ID
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 12px system-ui';
-      ctx.fillText(`${index + 1}`, centerX - 4, centerY + 4);
+      // Remove center points and person IDs for cleaner look
+      // (commented out the center point and person ID drawing)
     });
     
     // Always draw header to confirm canvas is working
