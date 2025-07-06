@@ -363,8 +363,8 @@ export default function UltimateSecurityDashboard() {
                             boxShadow: '0 4px 14px 0 rgba(59, 130, 246, 0.4)',
                             transform: 'scale(1)'
                           }}
-                          onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
-                          onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                          onMouseEnter={(e) => (e.target as HTMLElement).style.transform = 'scale(1.05)'}
+                          onMouseLeave={(e) => (e.target as HTMLElement).style.transform = 'scale(1)'}
                         >
                           {feeds.feed1.isStreaming ? <Pause style={{ width: '16px', height: '16px' }} /> : <Play style={{ width: '16px', height: '16px' }} />}
                           <span>{feeds.feed1.isStreaming ? 'STOP' : 'START'}</span>
@@ -596,8 +596,8 @@ export default function UltimateSecurityDashboard() {
                             boxShadow: '0 4px 14px 0 rgba(59, 130, 246, 0.4)',
                             transform: 'scale(1)'
                           }}
-                          onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
-                          onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                          onMouseEnter={(e) => (e.target as HTMLElement).style.transform = 'scale(1.05)'}
+                          onMouseLeave={(e) => (e.target as HTMLElement).style.transform = 'scale(1)'}
                         >
                           {feeds.feed2.isStreaming ? <Pause style={{ width: '16px', height: '16px' }} /> : <Play style={{ width: '16px', height: '16px' }} />}
                           <span>{feeds.feed2.isStreaming ? 'STOP' : 'START'}</span>
@@ -1127,8 +1127,8 @@ export default function UltimateSecurityDashboard() {
                             : 'rgba(59, 130, 246, 0.2)'
                         }`
                       }}
-                      onMouseEnter={(e) => e.target.style.background = 'rgba(71, 85, 105, 0.4)'}
-                      onMouseLeave={(e) => e.target.style.background = 'rgba(30, 41, 59, 0.3)'}
+                      onMouseEnter={(e) => (e.target as HTMLElement).style.background = 'rgba(71, 85, 105, 0.4)'}
+                      onMouseLeave={(e) => (e.target as HTMLElement).style.background = 'rgba(30, 41, 59, 0.3)'}
                     >
                       <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}>
                         <div style={{ flex: 1 }}>
