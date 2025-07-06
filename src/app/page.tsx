@@ -262,14 +262,28 @@ export default function EnhancedVideoAnalyticsDashboard() {
       setIsProcessingVideo(false);
 
       // Debug: Log the complete analysis result structure
-      console.log('=== COMPLETE ANALYSIS RESULT ===');
-      console.log('Full result object:', result);
-      console.log('Detection timeline:', result.detection_timeline);
-      console.log('Sample timeline entry:', result.detection_timeline?.[0]);
-      if (result.detection_timeline?.[0]?.detections) {
-        console.log('Sample detection:', result.detection_timeline[0].detections[0]);
+      console.log('🔍 === COMPLETE ANALYSIS RESULT ===');
+      console.log('📊 Full result object:', result);
+      console.log('⏱️ Detection timeline exists:', !!result.detection_timeline);
+      console.log('📈 Timeline length:', result.detection_timeline?.length || 0);
+      console.log('🎯 First timeline entry:', result.detection_timeline?.[0]);
+      console.log('🎯 Second timeline entry:', result.detection_timeline?.[1]);
+      console.log('🎯 Last timeline entry:', result.detection_timeline?.[result.detection_timeline?.length - 1]);
+      
+      if (result.detection_timeline?.[0]) {
+        const firstEntry = result.detection_timeline[0];
+        console.log('🔍 First entry structure:');
+        console.log('  - Keys:', Object.keys(firstEntry));
+        console.log('  - Has detections property:', 'detections' in firstEntry);
+        console.log('  - Detections value:', firstEntry.detections);
+        console.log('  - Detections type:', typeof firstEntry.detections);
+        console.log('  - Detections length:', firstEntry.detections?.length);
+        
+        if (firstEntry.detections?.[0]) {
+          console.log('🎯 First detection:', firstEntry.detections[0]);
+        }
       }
-      console.log('=== END ANALYSIS RESULT ===');
+      console.log('🔍 === END ANALYSIS RESULT ===');
 
       // Draw initial detections on the video
       setTimeout(() => {
@@ -479,11 +493,19 @@ export default function EnhancedVideoAnalyticsDashboard() {
       timestamp: closestEntry.timestamp,
       currentTime: currentTime,
       detectionsCount: closestEntry.detections?.length || 0,
-      entry: closestEntry
+      hasDetections: !!closestEntry.detections,
+      detectionsProp: Object.keys(closestEntry),
+      fullEntry: closestEntry
     });
     
     if (!closestEntry || !closestEntry.detections || closestEntry.detections.length === 0) {
-      console.log('No detections to draw for current time');
+      console.log('❌ No detections to draw because:', {
+        hasEntry: !!closestEntry,
+        hasDetectionsProperty: !!closestEntry?.detections,
+        detectionsLength: closestEntry?.detections?.length || 0,
+        entryKeys: closestEntry ? Object.keys(closestEntry) : 'no entry',
+        entryStructure: closestEntry
+      });
       return;
     }
     
