@@ -177,6 +177,15 @@ export default function EnhancedVideoAnalyticsDashboard() {
   
   const [alerts, setAlerts] = useState<any[]>([]);
   
+  // Heatmap data for activity tracking
+  const [heatmapData, setHeatmapData] = useState<{
+    feed1: { [key: string]: number };
+    feed2: { [key: string]: number };
+  }>({
+    feed1: {},
+    feed2: {}
+  });
+  
   const [config, setConfig] = useState({
     confidence: 0.08,
     maxPeople: 15,
@@ -193,6 +202,13 @@ export default function EnhancedVideoAnalyticsDashboard() {
   const videoRef2 = useRef<HTMLVideoElement | null>(null);
   const canvasRef1 = useRef<HTMLCanvasElement | null>(null);
   const canvasRef2 = useRef<HTMLCanvasElement | null>(null);
+  
+  // Refs for heatmap videos (duplicates)
+  const heatmapVideoRef1 = useRef<HTMLVideoElement | null>(null);
+  const heatmapVideoRef2 = useRef<HTMLVideoElement | null>(null);
+  const heatmapCanvasRef1 = useRef<HTMLCanvasElement | null>(null);
+  const heatmapCanvasRef2 = useRef<HTMLCanvasElement | null>(null);
+  
   const detectionIntervalRef1 = useRef<NodeJS.Timeout | null>(null);
   const detectionIntervalRef2 = useRef<NodeJS.Timeout | null>(null);
   const streamRef1 = useRef<MediaStream | null>(null);
@@ -205,6 +221,123 @@ export default function EnhancedVideoAnalyticsDashboard() {
   const uploadVideoRef2 = useRef<HTMLVideoElement>(null);
   const progressIntervalRef1 = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef2 = useRef<NodeJS.Timeout | null>(null);
+
+  // Heatmap functions
+  const updateHeatmapData = useCallback((detections: any[], feedId: 'feed1' | 'feed2') => {
+    if (!detections.length) return;
+    
+    setHeatmapData(prev => {
+      const newData = { ...prev };
+      const feedData = { ...newData[feedId] };
+      const gridSize = 32; // Grid cell size for heatmap
+      
+      detections.forEach(detection => {
+        const [x1, y1, x2, y2] = detection.bbox;
+        const centerX = Math.floor((x1 + x2) / 2 / gridSize) * gridSize;
+        const centerY = Math.floor((y1 + y2) / 2 / gridSize) * gridSize;
+        const key = `${centerX}_${centerY}`;
+        
+        feedData[key] = (feedData[key] || 0) + 1;
+      });
+      
+      newData[feedId] = feedData;
+      return newData;
+    });
+  }, []);
+
+  const drawHeatmap = useCallback((feedId: 'feed1' | 'feed2') => {
+    const heatmapVideoRef = feedId === 'feed1' ? heatmapVideoRef1 : heatmapVideoRef2;
+    const heatmapCanvasRef = feedId === 'feed1' ? heatmapCanvasRef1 : heatmapCanvasRef2;
+    const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
+    const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
+    
+    const canvas = heatmapCanvasRef.current;
+    const video = heatmapVideoRef.current;
+    
+    if (!canvas || !video) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Set canvas size to match video
+    const rect = video.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const feedData = heatmapData[feedId];
+    if (!feedData || Object.keys(feedData).length === 0) return;
+    
+    const gridSize = 32;
+    const maxDensity = Math.max(...Object.values(feedData)) || 1;
+    
+    // Scale factors
+    const scaleX = canvas.width / (video.videoWidth || 640);
+    const scaleY = canvas.height / (video.videoHeight || 480);
+    
+    // Draw heatmap cells
+    Object.entries(feedData).forEach(([key, density]) => {
+      const [x, y] = key.split('_').map(Number);
+      const scaledX = x * scaleX;
+      const scaledY = y * scaleY;
+      const scaledSize = gridSize * Math.min(scaleX, scaleY);
+      
+      const intensity = density / maxDensity;
+      
+      // Color based on intensity (blue to red heatmap)
+      let color;
+      if (intensity < 0.3) {
+        color = `rgba(59, 130, 246, ${intensity * 0.6})`; // Blue for low activity
+      } else if (intensity < 0.7) {
+        color = `rgba(245, 158, 11, ${intensity * 0.7})`; // Orange for medium
+      } else {
+        color = `rgba(239, 68, 68, ${intensity * 0.8})`; // Red for high activity
+      }
+      
+      // Smooth circles instead of squares for better visualization
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(scaledX + scaledSize/2, scaledY + scaledSize/2, scaledSize/2, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+    
+    // Overlay legend
+    const legendX = canvas.width - 120;
+    const legendY = 20;
+    
+    // Legend background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(legendX - 10, legendY - 10, 110, 90);
+    
+    // Legend title
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillText('Activity Density', legendX, legendY + 10);
+    
+    // Legend items
+    const legendItems = [
+      { color: 'rgba(59, 130, 246, 0.6)', label: 'Low' },
+      { color: 'rgba(245, 158, 11, 0.7)', label: 'Medium' },
+      { color: 'rgba(239, 68, 68, 0.8)', label: 'High' }
+    ];
+    
+    legendItems.forEach((item, index) => {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(legendX, legendY + 20 + (index * 18), 15, 12);
+      ctx.fillStyle = 'white';
+      ctx.font = '11px system-ui';
+      ctx.fillText(item.label, legendX + 20, legendY + 30 + (index * 18));
+    });
+    
+    // Heatmap mode indicator
+    ctx.fillStyle = 'rgba(255, 107, 53, 0.9)';
+    ctx.fillRect(10, canvas.height - 35, 100, 25);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 11px system-ui';
+    ctx.fillText('🔥 HEATMAP', 15, canvas.height - 18);
+  }, [heatmapData]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -434,8 +567,14 @@ export default function EnhancedVideoAnalyticsDashboard() {
           }
         }));
         
+        // Update heatmap data
+        updateHeatmapData(result.detections || [], feedId as 'feed1' | 'feed2');
+        
         // Draw bounding boxes
         drawRealBoundingBoxes(feedId, result.detections || []);
+        
+        // Update heatmap visualization
+        setTimeout(() => drawHeatmap(feedId as 'feed1' | 'feed2'), 100);
         
         // Update analytics
         updateRealTimeAnalytics(result, feedId);
@@ -454,9 +593,9 @@ export default function EnhancedVideoAnalyticsDashboard() {
     } catch (error) {
       console.error(`Real-time detection error for ${feedId}:`, error);
     }
-  }, [isConnected, config, apiUrl]);
+  }, [isConnected, config, apiUrl, updateHeatmapData, drawHeatmap]);
 
-  // Enhanced video analysis drawing with transparent bounding boxes
+  // Enhanced video analysis drawing with sharp, professional bounding boxes
   const drawVideoAnalysisResults = useCallback((timelineData: any[] = [], feedId: 'feed1' | 'feed2') => {
     const uploadVideoRef = feedId === 'feed1' ? uploadVideoRef1 : uploadVideoRef2;
     const canvasRef = feedId === 'feed1' ? canvasRef1 : canvasRef2;
@@ -494,7 +633,7 @@ export default function EnhancedVideoAnalyticsDashboard() {
     const scaleX = canvas.width / (video.videoWidth || 640);
     const scaleY = canvas.height / (video.videoHeight || 480);
     
-    // Draw each detection with transparent style
+    // Draw each detection with sharp, professional style
     closestEntry.detections.forEach((detection: any, index: number) => {
       const { bbox, confidence } = detection;
       if (!bbox || bbox.length !== 4) return;
@@ -505,54 +644,125 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
-      // Transparent bounding box - blue theme like the example
-      const boxColor = 'rgba(59, 130, 246, 0.3)';  // Transparent blue fill
-      const borderColor = 'rgba(59, 130, 246, 0.8)';  // Semi-transparent blue border
+      // Sharp, professional bounding box style
+      const boxWidth = scaledX2 - scaledX1;
+      const boxHeight = scaledY2 - scaledY1;
       
-      // Draw filled rectangle (transparent background)
-      ctx.fillStyle = boxColor;
-      ctx.fillRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+      // Main box - sharp edges with gradient
+      const gradient = ctx.createLinearGradient(scaledX1, scaledY1, scaledX2, scaledY2);
+      gradient.addColorStop(0, 'rgba(59, 130, 246, 0.15)');
+      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.25)');
       
-      // Draw border
-      ctx.strokeStyle = borderColor;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(scaledX1, scaledY1, boxWidth, boxHeight);
+      
+      // Sharp border with shadow effect
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
       ctx.lineWidth = 2;
-      ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+      ctx.shadowColor = 'rgba(59, 130, 246, 0.3)';
+      ctx.shadowBlur = 4;
+      ctx.strokeRect(scaledX1, scaledY1, boxWidth, boxHeight);
+      ctx.shadowBlur = 0;
       
-      // Small confidence badge in corner
-      if (confidence > 0.4) {
-        const badgeText = `${(confidence * 100).toFixed(0)}%`;
-        ctx.font = '11px system-ui';
-        const textMetrics = ctx.measureText(badgeText);
-        
-        // Small badge background
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
-        ctx.fillRect(scaledX1, scaledY1 - 18, textMetrics.width + 8, 16);
-        
-        // Badge text
-        ctx.fillStyle = 'white';
-        ctx.fillText(badgeText, scaledX1 + 4, scaledY1 - 6);
-      }
+      // Corner indicators (professional touch)
+      const cornerSize = 12;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 3;
       
-      // Small center dot
+      // Top-left corner
+      ctx.beginPath();
+      ctx.moveTo(scaledX1, scaledY1 + cornerSize);
+      ctx.lineTo(scaledX1, scaledY1);
+      ctx.lineTo(scaledX1 + cornerSize, scaledY1);
+      ctx.stroke();
+      
+      // Top-right corner
+      ctx.beginPath();
+      ctx.moveTo(scaledX2 - cornerSize, scaledY1);
+      ctx.lineTo(scaledX2, scaledY1);
+      ctx.lineTo(scaledX2, scaledY1 + cornerSize);
+      ctx.stroke();
+      
+      // Bottom-right corner
+      ctx.beginPath();
+      ctx.moveTo(scaledX2, scaledY2 - cornerSize);
+      ctx.lineTo(scaledX2, scaledY2);
+      ctx.lineTo(scaledX2 - cornerSize, scaledY2);
+      ctx.stroke();
+      
+      // Bottom-left corner
+      ctx.beginPath();
+      ctx.moveTo(scaledX1 + cornerSize, scaledY2);
+      ctx.lineTo(scaledX1, scaledY2);
+      ctx.lineTo(scaledX1, scaledY2 - cornerSize);
+      ctx.stroke();
+      
+      // Professional ID badge
+      const personId = `P${index + 1}`;
+      const confidenceText = `${(confidence * 100).toFixed(0)}%`;
+      
+      ctx.font = 'bold 11px system-ui';
+      const idMetrics = ctx.measureText(personId);
+      const confMetrics = ctx.measureText(confidenceText);
+      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 12;
+      
+      // Badge background with gradient
+      const badgeGradient = ctx.createLinearGradient(scaledX1, scaledY1 - 35, scaledX1, scaledY1);
+      badgeGradient.addColorStop(0, 'rgba(59, 130, 246, 0.95)');
+      badgeGradient.addColorStop(1, 'rgba(37, 99, 235, 0.95)');
+      
+      ctx.fillStyle = badgeGradient;
+      ctx.fillRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
+      
+      // Badge border
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
+      
+      // Badge text
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillText(personId, scaledX1 + 6, scaledY1 - 22);
+      ctx.font = '9px system-ui';
+      ctx.fillText(confidenceText, scaledX1 + 6, scaledY1 - 8);
+      
+      // Center crosshair
       const centerX = (scaledX1 + scaledX2) / 2;
       const centerY = (scaledY1 + scaledY2) / 2;
       
-      ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(centerX - 8, centerY);
+      ctx.lineTo(centerX + 8, centerY);
+      ctx.moveTo(centerX, centerY - 8);
+      ctx.lineTo(centerX, centerY + 8);
+      ctx.stroke();
+      
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.9)';
       ctx.beginPath();
       ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
       ctx.fill();
     });
     
-    // Clean header with people count
+    // Professional header
     const headerText = `${closestEntry.detections.length} People Detected`;
     ctx.font = 'bold 14px system-ui';
     const headerMetrics = ctx.measureText(headerText);
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(10, 10, headerMetrics.width + 16, 28);
+    const headerGradient = ctx.createLinearGradient(10, 10, 10, 35);
+    headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+    headerGradient.addColorStop(1, 'rgba(30, 41, 59, 0.85)');
+    
+    ctx.fillStyle = headerGradient;
+    ctx.fillRect(10, 10, headerMetrics.width + 20, 28);
+    
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(10, 10, headerMetrics.width + 20, 28);
     
     ctx.fillStyle = 'white';
-    ctx.fillText(headerText, 18, 28);
+    ctx.fillText(headerText, 20, 30);
   }, []);
 
   const drawRealBoundingBoxes = (feedId: string, detections: any[]) => {
@@ -590,62 +800,123 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const scaledX2 = x2 * scaleX;
       const scaledY2 = y2 * scaleY;
       
-      // Transparent blue styling like the example
-      const boxColor = 'rgba(16, 185, 129, 0.25)';  // Transparent green fill
-      const borderColor = 'rgba(16, 185, 129, 0.8)';  // Semi-transparent green border
+      const boxWidth = scaledX2 - scaledX1;
+      const boxHeight = scaledY2 - scaledY1;
       
-      // Draw filled rectangle (transparent background)
-      ctx.fillStyle = boxColor;
-      ctx.fillRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+      // Sharp, professional style with green theme for live
+      const gradient = ctx.createLinearGradient(scaledX1, scaledY1, scaledX2, scaledY2);
+      gradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+      gradient.addColorStop(1, 'rgba(16, 185, 129, 0.25)');
       
-      // Draw border
-      ctx.strokeStyle = borderColor;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(scaledX1, scaledY1, boxWidth, boxHeight);
+      
+      // Sharp border with glow effect
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.9)';
       ctx.lineWidth = 2;
-      ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+      ctx.shadowColor = 'rgba(16, 185, 129, 0.4)';
+      ctx.shadowBlur = 6;
+      ctx.strokeRect(scaledX1, scaledY1, boxWidth, boxHeight);
+      ctx.shadowBlur = 0;
       
-      // Small confidence badge
-      if (confidence > 0.4) {
-        const badgeText = `${(confidence * 100).toFixed(0)}%`;
-        ctx.font = '11px system-ui';
-        const textMetrics = ctx.measureText(badgeText);
-        
-        // Badge background
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
-        ctx.fillRect(scaledX1, scaledY1 - 18, textMetrics.width + 8, 16);
-        
-        // Badge text
-        ctx.fillStyle = 'white';
-        ctx.fillText(badgeText, scaledX1 + 4, scaledY1 - 6);
-      }
+      // Corner indicators
+      const cornerSize = 12;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 3;
       
-      // Small center dot
+      // Draw all four corners
+      ctx.beginPath();
+      // Top-left
+      ctx.moveTo(scaledX1, scaledY1 + cornerSize);
+      ctx.lineTo(scaledX1, scaledY1);
+      ctx.lineTo(scaledX1 + cornerSize, scaledY1);
+      // Top-right
+      ctx.moveTo(scaledX2 - cornerSize, scaledY1);
+      ctx.lineTo(scaledX2, scaledY1);
+      ctx.lineTo(scaledX2, scaledY1 + cornerSize);
+      // Bottom-right
+      ctx.moveTo(scaledX2, scaledY2 - cornerSize);
+      ctx.lineTo(scaledX2, scaledY2);
+      ctx.lineTo(scaledX2 - cornerSize, scaledY2);
+      // Bottom-left
+      ctx.moveTo(scaledX1 + cornerSize, scaledY2);
+      ctx.lineTo(scaledX1, scaledY2);
+      ctx.lineTo(scaledX1, scaledY2 - cornerSize);
+      ctx.stroke();
+      
+      // Professional badge for live detection
+      const personId = `P${index + 1}`;
+      const confidenceText = `${(confidence * 100).toFixed(0)}%`;
+      
+      ctx.font = 'bold 11px system-ui';
+      const idMetrics = ctx.measureText(personId);
+      const confMetrics = ctx.measureText(confidenceText);
+      const badgeWidth = Math.max(idMetrics.width, confMetrics.width) + 12;
+      
+      // Badge with green gradient
+      const badgeGradient = ctx.createLinearGradient(scaledX1, scaledY1 - 35, scaledX1, scaledY1);
+      badgeGradient.addColorStop(0, 'rgba(16, 185, 129, 0.95)');
+      badgeGradient.addColorStop(1, 'rgba(5, 150, 105, 0.95)');
+      
+      ctx.fillStyle = badgeGradient;
+      ctx.fillRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
+      
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(scaledX1, scaledY1 - 35, badgeWidth, 32);
+      
+      // Badge text
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillText(personId, scaledX1 + 6, scaledY1 - 22);
+      ctx.font = '9px system-ui';
+      ctx.fillText(confidenceText, scaledX1 + 6, scaledY1 - 8);
+      
+      // Center crosshair
       const centerX = (scaledX1 + scaledX2) / 2;
       const centerY = (scaledY1 + scaledY2) / 2;
       
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.8)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(centerX - 8, centerY);
+      ctx.lineTo(centerX + 8, centerY);
+      ctx.moveTo(centerX, centerY - 8);
+      ctx.lineTo(centerX, centerY + 8);
+      ctx.stroke();
+      
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
       ctx.beginPath();
       ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
       ctx.fill();
     });
     
-    // Live indicator
+    // Professional live header
     if (detections.length > 0) {
       const headerText = `${detections.length} People Detected`;
       ctx.font = 'bold 14px system-ui';
       const headerMetrics = ctx.measureText(headerText);
       
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(10, 10, headerMetrics.width + 16, 28);
+      const headerGradient = ctx.createLinearGradient(10, 10, 10, 35);
+      headerGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+      headerGradient.addColorStop(1, 'rgba(30, 41, 59, 0.85)');
+      
+      ctx.fillStyle = headerGradient;
+      ctx.fillRect(10, 10, headerMetrics.width + 50, 28);
+      
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(10, 10, headerMetrics.width + 50, 28);
       
       ctx.fillStyle = 'white';
-      ctx.fillText(headerText, 18, 28);
+      ctx.fillText(headerText, 20, 30);
       
-      // Live badge
+      // Live indicator
       ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
-      ctx.fillRect(canvas.width - 60, 10, 50, 20);
+      ctx.fillRect(canvas.width - 60, 10, 50, 22);
       ctx.fillStyle = 'white';
       ctx.font = 'bold 11px system-ui';
-      ctx.fillText('● LIVE', canvas.width - 55, 24);
+      ctx.fillText('● LIVE', canvas.width - 55, 25);
     }
   };
 
@@ -742,12 +1013,17 @@ export default function EnhancedVideoAnalyticsDashboard() {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       const videoRef = feedId === 'feed1' ? videoRef1 : videoRef2;
+      const heatmapVideoRef = feedId === 'feed1' ? heatmapVideoRef1 : heatmapVideoRef2;
       const streamRef = feedId === 'feed1' ? streamRef1 : streamRef2;
       
-      if (!videoRef.current) return;
+      if (!videoRef.current || !heatmapVideoRef.current) return;
 
       const videoElement = videoRef.current;
+      const heatmapVideoElement = heatmapVideoRef.current;
+      
+      // Set up both main and heatmap videos with the same stream
       videoElement.srcObject = stream;
+      heatmapVideoElement.srcObject = stream;
       streamRef.current = stream;
       
       setFeeds(prev => ({
@@ -758,13 +1034,16 @@ export default function EnhancedVideoAnalyticsDashboard() {
       videoElement.onloadeddata = () => {
         videoElement.play()
           .then(() => {
+            // Sync heatmap video
+            heatmapVideoElement.play();
             if (config.realTimeMode) {
               setTimeout(() => startRealTimeDetection(feedId), 1000);
             }
           })
           .catch(e => {
             videoElement.muted = true;
-            return videoElement.play();
+            heatmapVideoElement.muted = true;
+            videoElement.play().then(() => heatmapVideoElement.play());
           });
       };
       
@@ -908,6 +1187,14 @@ export default function EnhancedVideoAnalyticsDashboard() {
       Object.values(videoPreview).forEach(url => {
         if (url) URL.revokeObjectURL(url);
       });
+      
+      // Clean up heatmap video streams
+      if (streamRef1.current) {
+        streamRef1.current.getTracks().forEach(track => track.stop());
+      }
+      if (streamRef2.current) {
+        streamRef2.current.getTracks().forEach(track => track.stop());
+      }
     };
   }, []);
 
@@ -1161,6 +1448,62 @@ export default function EnhancedVideoAnalyticsDashboard() {
                 </div>
               )}
             </div>
+            
+            {/* Heatmap View Below Main Video */}
+            {(feeds.feed1.isStreaming || videoPreview.feed1) && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ width: '12px', height: '12px', background: 'linear-gradient(45deg, #ff6b35, #f59e0b)', borderRadius: '2px' }}></div>
+                  <h5 style={{ fontSize: '12px', fontWeight: '600', margin: 0, color: '#ff6b35' }}>Activity Heatmap</h5>
+                </div>
+                <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+                  {videoPreview.feed1 ? (
+                    <video
+                      ref={uploadVideoRef1}
+                      src={videoPreview.feed1}
+                      muted
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.3 }}
+                    />
+                  ) : (
+                    <video
+                      ref={heatmapVideoRef1}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.3 }}
+                    />
+                  )}
+                  
+                  <canvas
+                    ref={heatmapCanvasRef1}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none'
+                    }}
+                  />
+                  
+                  {!feeds.feed1.isStreaming && !videoPreview.feed1 && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(135deg, #0f172a, #1e293b)'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔥</div>
+                        <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>Heatmap will appear during detection</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             
             {/* Video Upload Section for Feed 1 */}
             <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
@@ -1416,6 +1759,62 @@ export default function EnhancedVideoAnalyticsDashboard() {
               )}
             </div>
             
+            {/* Heatmap View Below Main Video */}
+            {(feeds.feed2.isStreaming || videoPreview.feed2) && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ width: '12px', height: '12px', background: 'linear-gradient(45deg, #ff6b35, #f59e0b)', borderRadius: '2px' }}></div>
+                  <h5 style={{ fontSize: '12px', fontWeight: '600', margin: 0, color: '#ff6b35' }}>Activity Heatmap</h5>
+                </div>
+                <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+                  {videoPreview.feed2 ? (
+                    <video
+                      ref={uploadVideoRef2}
+                      src={videoPreview.feed2}
+                      muted
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.3 }}
+                    />
+                  ) : (
+                    <video
+                      ref={heatmapVideoRef2}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.3 }}
+                    />
+                  )}
+                  
+                  <canvas
+                    ref={heatmapCanvasRef2}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none'
+                    }}
+                  />
+                  
+                  {!feeds.feed2.isStreaming && !videoPreview.feed2 && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(135deg, #0f172a, #1e293b)'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔥</div>
+                        <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>Heatmap will appear during detection</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
             {/* Video Upload Section for Feed 2 */}
             <div style={{ padding: '20px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
@@ -1660,6 +2059,41 @@ export default function EnhancedVideoAnalyticsDashboard() {
                     Enable Alerts
                   </label>
                 </div>
+                
+                {/* Heatmap controls */}
+                <div style={{ 
+                  padding: '12px', 
+                  background: 'rgba(30, 41, 59, 0.5)', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 107, 53, 0.3)'
+                }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: '600', color: '#ff6b35', margin: '0 0 8px 0' }}>🔥 Heatmap Controls</h4>
+                  
+                  <button
+                    onClick={() => {
+                      setHeatmapData({ feed1: {}, feed2: {} });
+                      console.log('Heatmap data cleared for both feeds');
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: '#6b7280',
+                      color: 'white',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      marginBottom: '8px'
+                    }}
+                  >
+                    Clear All Heatmap Data
+                  </button>
+                  
+                  <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                    Heatmaps show activity density over time. Red areas indicate high activity zones.
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1757,96 +2191,153 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       </button>
                     </div>
                     
-                    {/* Simplified Timeline Chart */}
+                    {/* Advanced Timeline Analysis */}
                     <div style={{
                       background: 'rgba(30, 41, 59, 0.5)',
                       borderRadius: '12px',
                       padding: '20px',
                       marginBottom: '20px'
                     }}>
-                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>
-                        People Count Over Time
+                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 20px 0' }}>
+                        Activity Analysis
                       </h5>
                       
                       {videoAnalysisResults.feed1.detection_timeline && (
-                        <div style={{ overflowX: 'auto' }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'end', 
-                            gap: '6px', 
-                            minWidth: '600px', 
-                            height: '140px', 
-                            paddingBottom: '30px',
-                            paddingTop: '20px'
-                          }}>
-                            {createTimelineChartData(videoAnalysisResults.feed1).map((entry, index) => (
-                              <div key={index} style={{ 
-                                display: 'flex', 
-                                flexDirection: 'column', 
-                                alignItems: 'center', 
-                                flex: 1,
-                                minWidth: '20px'
-                              }}>
-                                {/* Bar */}
-                                <div style={{
-                                  width: '18px',
-                                  height: `${Math.max(entry.people * 12, 4)}px`,
-                                  background: entry.color,
-                                  borderRadius: '2px 2px 0 0',
-                                  marginBottom: '8px',
-                                  position: 'relative',
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                                }}>
-                                  {/* People count label above bar */}
-                                  {entry.people > 0 && (
-                                    <div style={{
-                                      position: 'absolute',
-                                      top: '-20px',
-                                      left: '50%',
-                                      transform: 'translateX(-50%)',
-                                      fontSize: '11px',
-                                      color: 'white',
-                                      fontWeight: '700',
-                                      background: 'rgba(0,0,0,0.6)',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      whiteSpace: 'nowrap'
-                                    }}>
-                                      {entry.people}
-                                    </div>
-                                  )}
-                                </div>
-                                {/* Time label */}
-                                <div style={{ 
-                                  fontSize: '9px', 
-                                  color: '#94a3b8', 
-                                  textAlign: 'center',
-                                  transform: 'rotate(-45deg)',
-                                  transformOrigin: 'center',
-                                  whiteSpace: 'nowrap',
-                                  marginTop: '4px'
-                                }}>
-                                  {entry.time}
-                                </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
+                          
+                          {/* Line Chart Visualization */}
+                          <div>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>People Count Timeline</h6>
+                            <div style={{ 
+                              position: 'relative',
+                              height: '120px', 
+                              background: 'rgba(15, 23, 42, 0.5)',
+                              borderRadius: '8px',
+                              padding: '16px',
+                              border: '1px solid rgba(59, 130, 246, 0.2)'
+                            }}>
+                              <svg width="100%" height="100%" style={{ overflow: 'visible' }}>
+                                {/* Grid lines */}
+                                {[0, 25, 50, 75, 100].map(y => (
+                                  <line 
+                                    key={y} 
+                                    x1="0" 
+                                    y1={`${y}%`} 
+                                    x2="100%" 
+                                    y2={`${y}%`} 
+                                    stroke="rgba(148, 163, 184, 0.1)" 
+                                    strokeWidth="1"
+                                  />
+                                ))}
+                                
+                                {/* Data line */}
+                                <polyline
+                                  fill="none"
+                                  stroke="#60a5fa"
+                                  strokeWidth="2"
+                                  points={
+                                    createTimelineChartData(videoAnalysisResults.feed1)
+                                      .map((entry, index, arr) => {
+                                        const x = (index / (arr.length - 1)) * 100;
+                                        const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
+                                        return `${x},${y}`;
+                                      })
+                                      .join(' ')
+                                  }
+                                />
+                                
+                                {/* Data points */}
+                                {createTimelineChartData(videoAnalysisResults.feed1).map((entry, index, arr) => {
+                                  const x = (index / (arr.length - 1)) * 100;
+                                  const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
+                                  return (
+                                    <circle
+                                      key={index}
+                                      cx={`${x}%`}
+                                      cy={`${y}%`}
+                                      r="3"
+                                      fill={entry.color}
+                                      stroke="white"
+                                      strokeWidth="1"
+                                    />
+                                  );
+                                })}
+                              </svg>
+                              
+                              {/* Y-axis labels */}
+                              <div style={{ position: 'absolute', left: '-10px', top: '0', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: '#64748b' }}>
+                                <span>{videoAnalysisResults.feed1.peak_occupancy}</span>
+                                <span>{Math.floor(videoAnalysisResults.feed1.peak_occupancy * 0.75)}</span>
+                                <span>{Math.floor(videoAnalysisResults.feed1.peak_occupancy * 0.5)}</span>
+                                <span>{Math.floor(videoAnalysisResults.feed1.peak_occupancy * 0.25)}</span>
+                                <span>0</span>
                               </div>
-                            ))}
+                            </div>
                           </div>
                           
-                          {/* Legend */}
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '16px', fontSize: '11px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }}></div>
-                              <span style={{ color: '#94a3b8' }}>1-4 People</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '12px', height: '12px', background: '#f59e0b', borderRadius: '2px' }}></div>
-                              <span style={{ color: '#94a3b8' }}>5-8 People</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></div>
-                              <span style={{ color: '#94a3b8' }}>9+ People</span>
+                          {/* Activity Patterns */}
+                          <div>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Activity Patterns</h6>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              
+                              {/* Peak Activity */}
+                              <div style={{ 
+                                background: 'rgba(239, 68, 68, 0.1)', 
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
+                              }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ef4444' }}>Peak Activity</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444' }}>
+                                  {videoAnalysisResults.feed1.peak_occupancy} people
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#fca5a5' }}>
+                                  at {(() => {
+                                    const peakFrame = videoAnalysisResults.feed1.detection_timeline?.find(entry => 
+                                      entry.people_count === videoAnalysisResults.feed1.peak_occupancy
+                                    );
+                                    const time = peakFrame?.timestamp || 0;
+                                    return `${Math.floor(time / 60)}:${(time % 60).toFixed(0).padStart(2, '0')}`;
+                                  })()}
+                                </div>
+                              </div>
+                              
+                              {/* Average Activity */}
+                              <div style={{ 
+                                background: 'rgba(245, 158, 11, 0.1)', 
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
+                              }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#f59e0b' }}>Average</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#f59e0b' }}>
+                                  {videoAnalysisResults.feed1.detection_timeline ? 
+                                    (videoAnalysisResults.feed1.detection_timeline.reduce((sum, entry) => sum + entry.people_count, 0) / 
+                                     videoAnalysisResults.feed1.detection_timeline.length).toFixed(1) : '0'} people
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#fbbf24' }}>throughout video</div>
+                              </div>
+                              
+                              {/* Busy Periods */}
+                              <div style={{ 
+                                background: 'rgba(16, 185, 129, 0.1)', 
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
+                              }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#10b981' }}>Busy Periods</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>
+                                  {videoAnalysisResults.feed1.detection_timeline ? 
+                                    videoAnalysisResults.feed1.detection_timeline.filter(entry => 
+                                      entry.people_count > (videoAnalysisResults.feed1.peak_occupancy * 0.7)
+                                    ).length : 0}
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#6ee7b7' }}>high activity moments</div>
+                              </div>
+                              
                             </div>
                           </div>
+                          
                         </div>
                       )}
                     </div>
@@ -1905,96 +2396,153 @@ export default function EnhancedVideoAnalyticsDashboard() {
                       </button>
                     </div>
                     
-                    {/* Simplified Timeline Chart */}
+                    {/* Advanced Timeline Analysis */}
                     <div style={{
                       background: 'rgba(30, 41, 59, 0.5)',
                       borderRadius: '12px',
                       padding: '20px',
                       marginBottom: '20px'
                     }}>
-                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 16px 0' }}>
-                        People Count Over Time
+                      <h5 style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1', margin: '0 0 20px 0' }}>
+                        Activity Analysis
                       </h5>
                       
                       {videoAnalysisResults.feed2.detection_timeline && (
-                        <div style={{ overflowX: 'auto' }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'end', 
-                            gap: '6px', 
-                            minWidth: '600px', 
-                            height: '140px', 
-                            paddingBottom: '30px',
-                            paddingTop: '20px'
-                          }}>
-                            {createTimelineChartData(videoAnalysisResults.feed2).map((entry, index) => (
-                              <div key={index} style={{ 
-                                display: 'flex', 
-                                flexDirection: 'column', 
-                                alignItems: 'center', 
-                                flex: 1,
-                                minWidth: '20px'
-                              }}>
-                                {/* Bar */}
-                                <div style={{
-                                  width: '18px',
-                                  height: `${Math.max(entry.people * 12, 4)}px`,
-                                  background: entry.color,
-                                  borderRadius: '2px 2px 0 0',
-                                  marginBottom: '8px',
-                                  position: 'relative',
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                                }}>
-                                  {/* People count label above bar */}
-                                  {entry.people > 0 && (
-                                    <div style={{
-                                      position: 'absolute',
-                                      top: '-20px',
-                                      left: '50%',
-                                      transform: 'translateX(-50%)',
-                                      fontSize: '11px',
-                                      color: 'white',
-                                      fontWeight: '700',
-                                      background: 'rgba(0,0,0,0.6)',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      whiteSpace: 'nowrap'
-                                    }}>
-                                      {entry.people}
-                                    </div>
-                                  )}
-                                </div>
-                                {/* Time label */}
-                                <div style={{ 
-                                  fontSize: '9px', 
-                                  color: '#94a3b8', 
-                                  textAlign: 'center',
-                                  transform: 'rotate(-45deg)',
-                                  transformOrigin: 'center',
-                                  whiteSpace: 'nowrap',
-                                  marginTop: '4px'
-                                }}>
-                                  {entry.time}
-                                </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
+                          
+                          {/* Line Chart Visualization */}
+                          <div>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>People Count Timeline</h6>
+                            <div style={{ 
+                              position: 'relative',
+                              height: '120px', 
+                              background: 'rgba(15, 23, 42, 0.5)',
+                              borderRadius: '8px',
+                              padding: '16px',
+                              border: '1px solid rgba(16, 185, 129, 0.2)'
+                            }}>
+                              <svg width="100%" height="100%" style={{ overflow: 'visible' }}>
+                                {/* Grid lines */}
+                                {[0, 25, 50, 75, 100].map(y => (
+                                  <line 
+                                    key={y} 
+                                    x1="0" 
+                                    y1={`${y}%`} 
+                                    x2="100%" 
+                                    y2={`${y}%`} 
+                                    stroke="rgba(148, 163, 184, 0.1)" 
+                                    strokeWidth="1"
+                                  />
+                                ))}
+                                
+                                {/* Data line */}
+                                <polyline
+                                  fill="none"
+                                  stroke="#10b981"
+                                  strokeWidth="2"
+                                  points={
+                                    createTimelineChartData(videoAnalysisResults.feed2)
+                                      .map((entry, index, arr) => {
+                                        const x = (index / (arr.length - 1)) * 100;
+                                        const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
+                                        return `${x},${y}`;
+                                      })
+                                      .join(' ')
+                                  }
+                                />
+                                
+                                {/* Data points */}
+                                {createTimelineChartData(videoAnalysisResults.feed2).map((entry, index, arr) => {
+                                  const x = (index / (arr.length - 1)) * 100;
+                                  const y = 100 - ((entry.people / Math.max(...arr.map(e => e.people), 1)) * 80);
+                                  return (
+                                    <circle
+                                      key={index}
+                                      cx={`${x}%`}
+                                      cy={`${y}%`}
+                                      r="3"
+                                      fill={entry.color}
+                                      stroke="white"
+                                      strokeWidth="1"
+                                    />
+                                  );
+                                })}
+                              </svg>
+                              
+                              {/* Y-axis labels */}
+                              <div style={{ position: 'absolute', left: '-10px', top: '0', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: '#64748b' }}>
+                                <span>{videoAnalysisResults.feed2.peak_occupancy}</span>
+                                <span>{Math.floor(videoAnalysisResults.feed2.peak_occupancy * 0.75)}</span>
+                                <span>{Math.floor(videoAnalysisResults.feed2.peak_occupancy * 0.5)}</span>
+                                <span>{Math.floor(videoAnalysisResults.feed2.peak_occupancy * 0.25)}</span>
+                                <span>0</span>
                               </div>
-                            ))}
+                            </div>
                           </div>
                           
-                          {/* Legend */}
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '16px', fontSize: '11px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }}></div>
-                              <span style={{ color: '#94a3b8' }}>1-4 People</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '12px', height: '12px', background: '#f59e0b', borderRadius: '2px' }}></div>
-                              <span style={{ color: '#94a3b8' }}>5-8 People</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></div>
-                              <span style={{ color: '#94a3b8' }}>9+ People</span>
+                          {/* Activity Patterns */}
+                          <div>
+                            <h6 style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0' }}>Activity Patterns</h6>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              
+                              {/* Peak Activity */}
+                              <div style={{ 
+                                background: 'rgba(239, 68, 68, 0.1)', 
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
+                              }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#ef4444' }}>Peak Activity</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444' }}>
+                                  {videoAnalysisResults.feed2.peak_occupancy} people
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#fca5a5' }}>
+                                  at {(() => {
+                                    const peakFrame = videoAnalysisResults.feed2.detection_timeline?.find(entry => 
+                                      entry.people_count === videoAnalysisResults.feed2.peak_occupancy
+                                    );
+                                    const time = peakFrame?.timestamp || 0;
+                                    return `${Math.floor(time / 60)}:${(time % 60).toFixed(0).padStart(2, '0')}`;
+                                  })()}
+                                </div>
+                              </div>
+                              
+                              {/* Average Activity */}
+                              <div style={{ 
+                                background: 'rgba(245, 158, 11, 0.1)', 
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
+                              }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#f59e0b' }}>Average</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#f59e0b' }}>
+                                  {videoAnalysisResults.feed2.detection_timeline ? 
+                                    (videoAnalysisResults.feed2.detection_timeline.reduce((sum, entry) => sum + entry.people_count, 0) / 
+                                     videoAnalysisResults.feed2.detection_timeline.length).toFixed(1) : '0'} people
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#fbbf24' }}>throughout video</div>
+                              </div>
+                              
+                              {/* Busy Periods */}
+                              <div style={{ 
+                                background: 'rgba(16, 185, 129, 0.1)', 
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                borderRadius: '6px', 
+                                padding: '8px' 
+                              }}>
+                                <div style={{ fontSize: '11px', fontWeight: '600', color: '#10b981' }}>Busy Periods</div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>
+                                  {videoAnalysisResults.feed2.detection_timeline ? 
+                                    videoAnalysisResults.feed2.detection_timeline.filter(entry => 
+                                      entry.people_count > (videoAnalysisResults.feed2.peak_occupancy * 0.7)
+                                    ).length : 0}
+                                </div>
+                                <div style={{ fontSize: '9px', color: '#6ee7b7' }}>high activity moments</div>
+                              </div>
+                              
                             </div>
                           </div>
+                          
                         </div>
                       )}
                     </div>
